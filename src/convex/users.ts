@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
 import { query, QueryCtx } from "./_generated/server";
 
 /**
@@ -31,3 +32,37 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
   }
   return await ctx.db.get(userId);
 };
+
+/**
+ * Search registered, non-guest users by name or email (for invite pickers).
+ * Excludes the signed-in user. Best-effort substring match, capped results.
+ */
+export const searchUsers = query({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { query: raw, limit }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const q = raw.trim().toLowerCase();
+    if (q === "") return [];
+    const cap = Math.min(Math.max(limit ?? 8, 1), 20);
+
+    const rows = await ctx.db.query("users").collect();
+    return rows
+      .filter((u) => u._id !== userId && u.isAnonymous !== true)
+      .filter((u) => {
+        const name = (u.name ?? "").toLowerCase();
+        const email = (u.email ?? "").toLowerCase();
+        return name.includes(q) || email.includes(q);
+      })
+      .slice(0, cap)
+      .map((u) => ({
+        _id: u._id,
+        name: u.name ?? "User",
+        email: u.email ?? "",
+        image: u.image,
+      }));
+  },
+});
