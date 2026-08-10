@@ -1,7 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { normalizeCode } from "./rooms";
+import { createNotification } from "./notifications";
+import { usersByEmails } from "./meetings";
 
 const PRESENCE_TTL_MS = 45_000; // drop presence rows that stopped heartbeating
 const SIGNAL_WINDOW_MS = 30 * 60_000; // prune old signals
@@ -49,6 +52,24 @@ export const joinRoom = mutation({
         .first();
       if (scheduled && scheduled.status === "scheduled") {
         await ctx.db.patch(scheduled._id, { status: "active" });
+
+        // The meeting is starting now — let invited attendees know
+        // (best-effort, respects their reminder preferences).
+        const attendees = await usersByEmails(ctx, scheduled.attendees ?? []);
+        for (const u of attendees) {
+          const wants = await ctx.runQuery(internal.settings.shouldNotify, {
+            userId: u._id,
+            type: "reminder",
+          });
+          if (!wants) continue;
+          await createNotification(ctx, {
+            userId: u._id,
+            type: "starting",
+            title: `Starting now: ${scheduled.title}`,
+            body: `Everyone's gathering · code ${normalized}`,
+            link: `/call/${normalized}`,
+          });
+        }
       }
     }
 

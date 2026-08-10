@@ -37,7 +37,7 @@ export function normalizeEmails(raw: string[]): string[] {
 }
 
 /** Registered users matching the given emails (best-effort lookup). */
-async function usersByEmails(ctx: MutationCtx | QueryCtx, emails: string[]) {
+export async function usersByEmails(ctx: MutationCtx | QueryCtx, emails: string[]) {
   const users: Doc<"users">[] = [];
   for (const email of emails) {
     const user = await ctx.db
@@ -225,6 +225,58 @@ export const cancelScheduled = mutation({
         title: `Cancelled: ${scheduled.title}`,
         body: `${when} is no longer happening.`,
       });
+    }
+  },
+});
+
+/**
+ * Record an invitee's response (yes / no / maybe) for a scheduled meeting.
+ * Only invited attendees can respond. The host is notified when someone
+ * says yes (best-effort, respects their notification preferences).
+ */
+export const respondRsvp = mutation({
+  args: {
+    code: v.string(),
+    status: v.union(v.literal("yes"), v.literal("no"), v.literal("maybe")),
+  },
+  handler: async (ctx, { code, status }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to respond");
+    const normalized = normalizeCode(code);
+    const scheduled = await ctx.db
+      .query("scheduledMeetings")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (scheduled === null) throw new Error("Scheduled meeting not found.");
+    if (scheduled.status !== "scheduled")
+      throw new Error("This meeting is no longer accepting responses.");
+
+    const me = await ctx.db.get(userId);
+    const email = me?.email?.toLowerCase();
+    if (email === undefined || email === "")
+      throw new Error("Your account needs an email to respond.");
+    const invited = (scheduled.attendees ?? []).includes(email);
+    if (!invited) throw new Error("You weren't invited to this meeting.");
+
+    const existing = (scheduled.rsvps ?? []).filter((r) => r.email !== email);
+    const rsvps = [...existing, { email, status, respondedAt: Date.now() }];
+    await ctx.db.patch(scheduled._id, { rsvps });
+
+    // Let the host know who's coming (best-effort).
+    if (status === "yes") {
+      const wants = await ctx.runQuery(internal.settings.shouldNotify, {
+        userId: scheduled.hostId,
+        type: "invite",
+      });
+      if (wants) {
+        await createNotification(ctx, {
+          userId: scheduled.hostId,
+          type: "meeting",
+          title: `${me?.name ?? email} is coming to ${scheduled.title}`,
+          body: `${new Date(scheduled.startTime).toLocaleString()} · code ${normalized}`,
+          link: `/call/${normalized}`,
+        });
+      }
     }
   },
 });

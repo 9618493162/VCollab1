@@ -221,6 +221,17 @@ export default function History() {
                     {invited > 0 && status === "scheduled" && (
                       <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Users className="size-3" /> {invited} invited
+                        {meta?.rsvps && meta.rsvps.length > 0 && (
+                          <>
+                            <span>·</span>
+                            <span className="text-emerald-500">
+                              {meta.rsvps.filter((r) => r.status === "yes").length} going
+                            </span>
+                            <span className="text-muted-foreground/60">
+                              · {meta.rsvps.filter((r) => r.status === "maybe").length} maybe
+                            </span>
+                          </>
+                        )}
                         {!isHost && <span className="text-primary">· you're invited</span>}
                       </p>
                     )}

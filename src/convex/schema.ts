@@ -97,6 +97,19 @@ const schema = defineSchema(
       startTime: v.number(), // epoch ms
       durationMinutes: v.number(),
       attendees: v.optional(v.array(v.string())), // invitee emails
+      rsvps: v.optional(
+        v.array(
+          v.object({
+            email: v.string(), // normalized invitee email
+            status: v.union(
+              v.literal("yes"),
+              v.literal("no"),
+              v.literal("maybe"),
+            ),
+            respondedAt: v.number(),
+          }),
+        ),
+      ), // per-invitee response, keyed by email
       status: v.union(
         v.literal("scheduled"),
         v.literal("active"),

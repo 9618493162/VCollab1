@@ -50,6 +50,7 @@ import {
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 function extractCode(raw: string): string {
   const match = raw
@@ -84,7 +85,9 @@ export default function Dashboard() {
     title: string;
   } | null>(null);
   const cancelScheduled = useMutation(api.meetings.cancelScheduled);
+  const respondRsvp = useMutation(api.meetings.respondRsvp);
   const [cancelling, setCancelling] = useState(false);
+  const [rsvpBusy, setRsvpBusy] = useState<string | null>(null);
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
   const [greet, greetMsg] = greeting();
@@ -162,6 +165,23 @@ export default function Dashboard() {
       toast.error(error instanceof Error ? error.message : "Couldn't cancel.");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleRsvp = async (code: string, status: "yes" | "no" | "maybe") => {
+    if (rsvpBusy) return;
+    setRsvpBusy(code);
+    try {
+      await respondRsvp({ code, status });
+      if (status === "yes") {
+        toast.success("You're going — the host will be notified.");
+      } else {
+        toast.success(status === "maybe" ? "Marked as maybe." : "Response saved.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save your response.");
+    } finally {
+      setRsvpBusy(null);
     }
   };
 
@@ -288,6 +308,13 @@ export default function Dashboard() {
                     {upcomingList.map((m) => {
                       const isHost = m.hostId === user?._id;
                       const attendeeCount = m.attendees?.length ?? 0;
+                      const rsvps = m.rsvps ?? [];
+                      const confirmed = rsvps.filter((r) => r.status === "yes").length;
+                      const declined = rsvps.filter((r) => r.status === "no").length;
+                      const myEmail = user?.email?.toLowerCase();
+                      const myRsvp = myEmail
+                        ? rsvps.find((r) => r.email === myEmail)?.status
+                        : undefined;
                       return (
                         <li
                           key={m._id}
@@ -343,7 +370,59 @@ export default function Dashboard() {
                                 <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                                   <Users className="size-3" />
                                   {attendeeCount} invited
+                                  {isHost && rsvps.length > 0 && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="text-emerald-500">
+                                        {confirmed} going
+                                      </span>
+                                      {declined > 0 && (
+                                        <span className="text-muted-foreground/60">
+                                          · {declined} can't
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
                                 </span>
+                              </div>
+                            )}
+                            {!isHost && (
+                              <div className="mt-2 flex items-center gap-1.5">
+                                <span className="text-[11px] text-muted-foreground">
+                                  {myRsvp
+                                    ? myRsvp === "yes"
+                                      ? "You're going ✓"
+                                      : myRsvp === "maybe"
+                                        ? "You marked maybe"
+                                        : "You can't make it"
+                                    : "Will you attend?"}
+                                </span>
+                                {(
+                                  [
+                                    { id: "yes", label: "Going" },
+                                    { id: "maybe", label: "Maybe" },
+                                    { id: "no", label: "Can't" },
+                                  ] as const
+                                ).map((opt) => (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    disabled={rsvpBusy === m.code}
+                                    onClick={() => void handleRsvp(m.code, opt.id)}
+                                    className={cn(
+                                      "rounded-full border px-2.5 py-0.5 text-[11px] transition-colors",
+                                      myRsvp === opt.id
+                                        ? opt.id === "yes"
+                                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-500"
+                                          : opt.id === "maybe"
+                                            ? "border-amber-500/40 bg-amber-500/15 text-amber-500"
+                                            : "border-border bg-muted text-muted-foreground"
+                                        : "border-border text-muted-foreground hover:text-foreground",
+                                    )}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
                               </div>
                             )}
                           </div>

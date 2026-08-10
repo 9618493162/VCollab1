@@ -114,3 +114,46 @@ describe("scheduled meetings", () => {
     expect(notifications[0].title).toContain("Cancelled: Design review");
   });
 });
+
+describe("RSVP flow", () => {
+  it("only invited attendees can respond, and updates are stored per email", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const inviteeId = await insertUser(t, "invitee@example.com", "Invitee");
+    const strangerId = await insertUser(t, "stranger@example.com", "Stranger");
+
+    const host = t.withIdentity({ subject: hostId });
+    const invitee = t.withIdentity({ subject: inviteeId });
+    const stranger = t.withIdentity({ subject: strangerId });
+
+    const code = await host.mutation(api.meetings.scheduleMeeting, {
+      title: "Product sync",
+      startTime: Date.now() + 60 * 60_000,
+      durationMinutes: 30,
+      attendees: ["invitee@example.com"],
+    });
+
+    // Non-invited users can't respond.
+    await expect(
+      stranger.mutation(api.meetings.respondRsvp, { code, status: "yes" }),
+    ).rejects.toThrow("You weren't invited to this meeting.");
+
+    // Invitee RSVPs yes → host is notified.
+    await invitee.mutation(api.meetings.respondRsvp, { code, status: "yes" });
+    const hostNotifs = await host.query(api.notifications.listNotifications);
+    expect(hostNotifs[0].type).toBe("meeting");
+    expect(hostNotifs[0].title).toContain("Invitee is coming");
+
+    // Host sees the response on the scheduled meeting.
+    const upcoming = await host.query(api.meetings.listUpcoming);
+    expect(upcoming[0].rsvps).toEqual([
+      { email: "invitee@example.com", status: "yes", respondedAt: expect.any(Number) },
+    ]);
+
+    // Changing the response replaces, not duplicates.
+    await invitee.mutation(api.meetings.respondRsvp, { code, status: "maybe" });
+    const after = await host.query(api.meetings.listUpcoming);
+    expect(after[0].rsvps).toHaveLength(1);
+    expect(after[0].rsvps![0].status).toBe("maybe");
+  });
+});
