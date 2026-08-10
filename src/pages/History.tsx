@@ -11,10 +11,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAction, useQuery } from "convex/react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useAuth } from "@/hooks/use-auth";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
   CalendarClock,
+  CalendarX,
   ClipboardList,
   FileText,
   Loader2,
@@ -22,6 +34,7 @@ import {
   Play,
   Search,
   Sparkles,
+  Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -37,11 +50,18 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function History() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const rooms = useQuery(api.rooms.listMyRooms);
   const scheduled = useQuery(api.meetings.listScheduled);
+  const cancelScheduled = useMutation(api.meetings.cancelScheduled);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [details, setDetails] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{
+    code: string;
+    title: string;
+  } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   type Scheduled = NonNullable<typeof scheduled>[number];
 
@@ -57,7 +77,7 @@ export default function History() {
       const status = room.status ?? meta?.status ?? "ended";
       const title = room.title ?? meta?.title ?? "Untitled meeting";
       const startTime = room.startedAt ?? meta?.startTime ?? room.createdAt;
-      return { room, title, status, startTime };
+      return { room, meta, title, status, startTime };
     });
     const q = query.trim().toLowerCase();
     return all
@@ -76,6 +96,20 @@ export default function History() {
     for (const r of rows) counts[r.status] = (counts[r.status] ?? 0) + 1;
     return counts;
   }, [rows]);
+
+  const handleCancel = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await cancelScheduled({ code: cancelTarget.code });
+      toast.success("Meeting cancelled — attendees were notified.");
+      setCancelTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't cancel.");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -145,74 +179,131 @@ export default function History() {
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {rows.map(({ room, title, status, startTime }) => (
-                <div
-                  key={room._id}
-                  className="glass group relative overflow-hidden rounded-2xl p-5 transition-all hover:-translate-y-1 hover:shadow-xl"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "rounded-full border-0 capitalize",
-                        STATUS_STYLES[status] ?? STATUS_STYLES.ended,
-                      )}
-                    >
-                      {status}
-                    </Badge>
-                    <p className="font-mono text-xs tracking-tight text-muted-foreground">
-                      {room.code}
+              {rows.map(({ room, meta, title, status, startTime }) => {
+                const isHost = meta?.hostId === user?._id;
+                const invited = meta?.attendees?.length ?? 0;
+                return (
+                  <div
+                    key={room._id}
+                    className="glass group relative overflow-hidden rounded-2xl p-5 transition-all hover:-translate-y-1 hover:shadow-xl"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "rounded-full border-0 capitalize",
+                          STATUS_STYLES[status] ?? STATUS_STYLES.ended,
+                        )}
+                      >
+                        {status}
+                      </Badge>
+                      <p className="font-mono text-xs tracking-tight text-muted-foreground">
+                        {room.code}
+                      </p>
+                    </div>
+
+                    <h3 className="mt-4 truncate font-display text-base font-semibold">
+                      {title}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {new Date(startTime).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
                     </p>
-                  </div>
+                    {meta?.description && (
+                      <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground/80">
+                        {meta.description}
+                      </p>
+                    )}
+                    {invited > 0 && status === "scheduled" && (
+                      <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Users className="size-3" /> {invited} invited
+                        {!isHost && <span className="text-primary">· you're invited</span>}
+                      </p>
+                    )}
 
-                  <h3 className="mt-4 truncate font-display text-base font-semibold">
-                    {title}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {new Date(startTime).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </p>
-
-                  <div className="mt-5 flex items-center gap-2">
-                    {(status === "active" || status === "scheduled") && (
+                    <div className="mt-5 flex items-center gap-2">
+                      {(status === "active" || status === "scheduled") && (
+                        <Button
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => navigate(`/call/${room.code}`)}
+                        >
+                          <Play className="mr-1.5 size-3.5" /> Join
+                        </Button>
+                      )}
                       <Button
                         size="sm"
+                        variant="outline"
                         className="rounded-full"
-                        onClick={() => navigate(`/call/${room.code}`)}
+                        onClick={() => navigate(`/collab/${room.code}`)}
                       >
-                        <Play className="mr-1.5 size-3.5" /> Join
+                        <ClipboardList className="mr-1.5 size-3.5" /> Notes & board
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={() => navigate(`/collab/${room.code}`)}
-                    >
-                      <ClipboardList className="mr-1.5 size-3.5" /> Notes & board
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="ml-auto size-8 rounded-full"
-                      aria-label="AI summary"
-                      onClick={() => setDetails(room.code)}
-                    >
-                      <Sparkles className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
-                    </Button>
+                      {isHost && status === "scheduled" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setCancelTarget({ code: room.code, title })}
+                        >
+                          <CalendarX className="mr-1.5 size-3.5" /> Cancel
+                        </Button>
+                      )}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="ml-auto size-8 rounded-full"
+                        aria-label="AI summary"
+                        onClick={() => setDetails(room.code)}
+                      >
+                        <Sparkles className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </main>
 
       {details && <MeetingDetails code={details} onClose={() => setDetails(null)} />}
+
+      <AlertDialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">
+              Cancel “{cancelTarget?.title ?? ""}”?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Attendees will get a notification that the meeting is no longer
+              happening. The meeting code will stop working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+              className="rounded-full bg-destructive text-white hover:bg-destructive/90"
+            >
+              {cancelling ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <CalendarX className="mr-2 size-4" />
+              )}
+              Cancel meeting
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -12,6 +12,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -25,6 +35,7 @@ import {
   ArrowRight,
   CalendarClock,
   CalendarPlus,
+  CalendarX,
   Check,
   ClipboardList,
   Clock3,
@@ -33,6 +44,7 @@ import {
   Play,
   Plus,
   Sparkles,
+  Users,
   Video,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -60,12 +72,19 @@ export default function Dashboard() {
   const createRoom = useMutation(api.rooms.createRoom);
   const myRooms = useQuery(api.rooms.listMyRooms);
   const upcoming = useQuery(api.meetings.listUpcoming);
+  const invited = useQuery(api.meetings.listInvited);
   const insights = useQuery(api.aiData.getMyAiInsights);
 
   const [joinCode, setJoinCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<{
+    code: string;
+    title: string;
+  } | null>(null);
+  const cancelScheduled = useMutation(api.meetings.cancelScheduled);
+  const [cancelling, setCancelling] = useState(false);
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
   const [greet, greetMsg] = greeting();
@@ -83,12 +102,22 @@ export default function Dashboard() {
     return {
       meetings: rooms.length,
       meetingsToday,
-      upcoming: (upcoming ?? []).length,
+      upcoming: (upcoming ?? []).length + (invited ?? []).length,
       hours,
       summaries: insights?.summaries.length ?? 0,
       actionItems: insights?.actionItems.length ?? 0,
     };
-  }, [myRooms, upcoming, insights]);
+  }, [myRooms, upcoming, invited, insights]);
+
+  // hosted + invited meetings, sorted by start time
+  const upcomingList = useMemo(() => {
+    const all = [...(upcoming ?? []), ...(invited ?? [])];
+    const seen = new Set<string>();
+    return all
+      .filter((m) => (seen.has(m.code) ? false : (seen.add(m.code), true)))
+      .sort((a, b) => a.startTime - b.startTime)
+      .slice(0, 10);
+  }, [upcoming, invited]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -119,6 +148,20 @@ export default function Dashboard() {
       setTimeout(() => setCopied(null), 1500);
     } catch {
       toast.error("Couldn't copy the link.");
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await cancelScheduled({ code: cancelTarget.code });
+      toast.success("Meeting cancelled — attendees were notified.");
+      setCancelTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't cancel.");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -211,21 +254,21 @@ export default function Dashboard() {
                 <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
                   <CalendarClock className="size-4 text-primary" /> Upcoming
                 </h2>
-                {upcoming && upcoming.length > 0 && (
+                {upcomingList.length > 0 && (
                   <span className="text-xs tabular-nums text-muted-foreground">
-                    {upcoming.length}
+                    {upcomingList.length}
                   </span>
                 )}
               </div>
 
               <div className="mt-4">
-                {upcoming === undefined ? (
+                {upcoming === undefined || invited === undefined ? (
                   <div className="space-y-3">
                     {Array.from({ length: 2 }).map((_, i) => (
                       <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
                     ))}
                   </div>
-                ) : upcoming.length === 0 ? (
+                ) : upcomingList.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border py-10 text-center">
                     <CalendarPlus className="mx-auto size-5 text-muted-foreground/60" />
                     <p className="mt-3 text-sm text-muted-foreground">
@@ -242,57 +285,105 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <ul className="divide-y divide-border/60">
-                    {upcoming.map((m) => (
-                      <li
-                        key={m._id}
-                        className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate font-medium">{m.title}</p>
-                            <Badge
-                              variant="secondary"
-                              className="rounded-full font-mono text-[10px]"
-                            >
-                              {m.code}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <CalendarClock className="size-3.5" />
-                            {new Date(m.startTime).toLocaleString(undefined, {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                            <span>· {m.durationMinutes} min</span>
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full"
-                            onClick={() => handleCopy(m.code)}
-                          >
-                            {copied === m.code ? (
-                              <Check className="size-3.5" />
-                            ) : (
-                              <Copy className="size-3.5" />
+                    {upcomingList.map((m) => {
+                      const isHost = m.hostId === user?._id;
+                      const attendeeCount = m.attendees?.length ?? 0;
+                      return (
+                        <li
+                          key={m._id}
+                          className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate font-medium">{m.title}</p>
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full font-mono text-[10px]"
+                              >
+                                {m.code}
+                              </Badge>
+                              {!isHost && (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-primary/30 text-primary"
+                                >
+                                  Invited
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <CalendarClock className="size-3.5" />
+                              {new Date(m.startTime).toLocaleString(undefined, {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                              <span>· {m.durationMinutes} min</span>
+                            </p>
+                            {m.description && (
+                              <p className="mt-1 line-clamp-1 max-w-md text-xs text-muted-foreground/80">
+                                {m.description}
+                              </p>
                             )}
-                            {copied === m.code ? "Copied" : "Invite"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="rounded-full"
-                            onClick={() => navigate(`/call/${m.code}`)}
-                          >
-                            <Play className="mr-1.5 size-3.5" /> Join
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
+                            {attendeeCount > 0 && (
+                              <div className="mt-1.5 flex items-center gap-1.5">
+                                <div className="flex -space-x-1.5">
+                                  {m.attendees!.slice(0, 3).map((email) => (
+                                    <span
+                                      key={email}
+                                      title={email}
+                                      className="flex size-5 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-[9px] font-bold text-white ring-2 ring-background"
+                                    >
+                                      {email.trim()[0]?.toUpperCase() ?? "?"}
+                                    </span>
+                                  ))}
+                                </div>
+                                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                  <Users className="size-3" />
+                                  {attendeeCount} invited
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => handleCopy(m.code)}
+                            >
+                              {copied === m.code ? (
+                                <Check className="size-3.5" />
+                              ) : (
+                                <Copy className="size-3.5" />
+                              )}
+                              {copied === m.code ? "Copied" : "Invite"}
+                            </Button>
+                            {isHost && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() =>
+                                  setCancelTarget({ code: m.code, title: m.title })
+                                }
+                              >
+                                <CalendarX className="mr-1.5 size-3.5" /> Cancel
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => navigate(`/call/${m.code}`)}
+                            >
+                              <Play className="mr-1.5 size-3.5" /> Join
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -431,6 +522,38 @@ export default function Dashboard() {
           toast.success("Meeting scheduled — invite link copied.");
         }}
       />
+
+      <AlertDialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">
+              Cancel “{cancelTarget?.title ?? ""}”?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Attendees will get a notification that the meeting is no longer
+              happening. The meeting code will stop working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+              className="rounded-full bg-destructive text-white hover:bg-destructive/90"
+            >
+              {cancelling ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <CalendarX className="mr-2 size-4" />
+              )}
+              Cancel meeting
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

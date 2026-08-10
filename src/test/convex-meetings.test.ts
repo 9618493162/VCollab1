@@ -78,4 +78,39 @@ describe("scheduled meetings", () => {
     await host.mutation(api.meetings.cancelScheduled, { code });
     expect(await host.query(api.meetings.listUpcoming)).toHaveLength(0);
   });
+
+  it("lets invited attendees see the meeting and notifies them when it's cancelled", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const inviteeId = await insertUser(t, "invitee@example.com", "Invitee");
+
+    const host = t.withIdentity({ subject: hostId });
+    const invitee = t.withIdentity({ subject: inviteeId });
+
+    const code = await host.mutation(api.meetings.scheduleMeeting, {
+      title: "Design review",
+      startTime: Date.now() + 60 * 60_000,
+      durationMinutes: 30,
+      attendees: ["invitee@example.com"],
+    });
+
+    // The host sees it in listUpcoming; the invitee sees it in listInvited.
+    expect(await host.query(api.meetings.listUpcoming)).toHaveLength(1);
+    const invited = await invitee.query(api.meetings.listInvited);
+    expect(invited).toHaveLength(1);
+    expect(invited[0].code).toBe(code);
+
+    // The invitee does not see it in listUpcoming (they don't host it).
+    expect(await invitee.query(api.meetings.listUpcoming)).toHaveLength(0);
+
+    // The host has no invited list for their own meeting.
+    expect(await host.query(api.meetings.listInvited)).toHaveLength(0);
+
+    // Cancelling notifies the registered attendee.
+    await host.mutation(api.meetings.cancelScheduled, { code });
+    expect(await invitee.query(api.meetings.listInvited)).toHaveLength(0);
+    const notifications = await invitee.query(api.notifications.listNotifications);
+    expect(notifications[0].type).toBe("meeting");
+    expect(notifications[0].title).toContain("Cancelled: Design review");
+  });
 });

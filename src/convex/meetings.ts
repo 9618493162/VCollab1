@@ -210,6 +210,22 @@ export const cancelScheduled = mutation({
     if (room && room.createdBy === userId) {
       await ctx.db.patch(room._id, { status: "ended" });
     }
+
+    // Let registered attendees know the meeting is off (best-effort).
+    const when = new Date(scheduled.startTime).toLocaleString();
+    for (const u of await usersByEmails(ctx, scheduled.attendees ?? [])) {
+      const wantsCancels = await ctx.runQuery(internal.settings.shouldNotify, {
+        userId: u._id,
+        type: "invite",
+      });
+      if (!wantsCancels) continue;
+      await createNotification(ctx, {
+        userId: u._id,
+        type: "meeting",
+        title: `Cancelled: ${scheduled.title}`,
+        body: `${when} is no longer happening.`,
+      });
+    }
   },
 });
 
@@ -227,7 +243,7 @@ export const listScheduled = query({
   },
 });
 
-/** Upcoming, not-yet-started meetings. */
+/** Upcoming, not-yet-started meetings hosted by this user. */
 export const listUpcoming = query({
   args: {},
   handler: async (ctx) => {
@@ -241,6 +257,34 @@ export const listUpcoming = query({
     return rows
       .filter(
         (m) => m.status === "scheduled" && m.startTime + m.durationMinutes * 60_000 > now,
+      )
+      .sort((a, b) => a.startTime - b.startTime)
+      .slice(0, 10);
+  },
+});
+
+/**
+ * Upcoming meetings this user was invited to (their email is in the attendee
+ * list) but does not host. Lets attendees see and join scheduled meetings
+ * without needing the invite link.
+ */
+export const listInvited = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const me = await ctx.db.get(userId);
+    const email = me?.email?.toLowerCase();
+    if (email === undefined || email === "") return [];
+    const now = Date.now();
+    const rows = await ctx.db.query("scheduledMeetings").collect();
+    return rows
+      .filter(
+        (m) =>
+          m.hostId !== userId &&
+          m.status === "scheduled" &&
+          (m.attendees ?? []).includes(email) &&
+          m.startTime + m.durationMinutes * 60_000 > now,
       )
       .sort((a, b) => a.startTime - b.startTime)
       .slice(0, 10);
