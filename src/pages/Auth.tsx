@@ -127,7 +127,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   hiiiiii<span className="text-muted-foreground">.</span>
                 </button>
                 <CardTitle className="text-lg font-medium tracking-tight">
-                  Sign in to your journal
+                  Sign in to start a meeting
                 </CardTitle>
                 <CardDescription>
                   Enter your email and we'll send a sign-in code

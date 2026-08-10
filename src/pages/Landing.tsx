@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MonitorUp, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,19 +17,19 @@ const transition = (delay: number) => ({
 
 const steps = [
   {
-    index: "01",
-    title: "Log a hi",
-    body: "Who you greeted, a line worth remembering, and how much hi it was. Thirty seconds, done.",
+    icon: Users,
+    title: "Start a meeting",
+    body: "One click gets you a shareable code — abc-defg-hij style. No signup for guests.",
   },
   {
-    index: "02",
-    title: "Watch the streak",
-    body: "One hello a day keeps the streak alive. Quietly, gently motivating.",
+    icon: MonitorUp,
+    title: "Talk face to face",
+    body: "Crisp peer-to-peer video straight from your browser. Mic, camera, and screen share, all on.",
   },
   {
-    index: "03",
-    title: "Look back",
-    body: "A clean, chronological record of every person you've said hi to.",
+    icon: ShieldCheck,
+    title: "Nothing is stored",
+    body: "Your words travel directly between participants. No recording, no retention, no noise.",
   },
 ];
 
@@ -56,10 +56,10 @@ export default function Landing() {
               How it works
             </a>
             <Link
-              to={isAuthenticated ? "/dashboard" : "/auth"}
+              to={primaryTarget}
               className="font-medium text-foreground transition-opacity hover:opacity-60"
             >
-              {isAuthenticated ? "Open journal" : "Sign in"}
+              {isAuthenticated ? "Meetings" : "Sign in"}
             </Link>
           </nav>
         </div>
@@ -72,15 +72,17 @@ export default function Landing() {
           transition={transition(0.05)}
           className="mb-8 text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground"
         >
-          A tiny journal for tiny hellos
+          Video meetings, minus the fuss
         </motion.p>
 
         <motion.h1
           {...fadeUp}
           transition={transition(0.15)}
-          className="text-[clamp(4rem,19vw,15rem)] font-extralight leading-none tracking-[-0.05em]"
+          className="text-[clamp(3rem,13vw,10rem)] font-extralight leading-none tracking-[-0.05em]"
         >
-          hiiiiii<span className="text-muted-foreground/70">.</span>
+          say hi,
+          <br />
+          face to face<span className="text-muted-foreground/70">.</span>
         </motion.h1>
 
         <motion.p
@@ -88,8 +90,8 @@ export default function Landing() {
           transition={transition(0.25)}
           className="mt-10 max-w-md text-[15px] leading-7 text-muted-foreground"
         >
-          Every hello, remembered. Log who you greeted and how much hi it was,
-          and watch your streak grow — one small moment at a time.
+          A quiet little meeting app. Start a call, share a code, and talk —
+          peer-to-peer, right in your browser. Nothing is recorded or stored.
         </motion.p>
 
         <motion.div
@@ -99,7 +101,7 @@ export default function Landing() {
         >
           <Button asChild size="lg" className="h-12 rounded-full px-8">
             <Link to={primaryTarget}>
-              Start saying hi
+              Start a meeting
               <ArrowRight className="ml-2 size-4" />
             </Link>
           </Button>
@@ -138,20 +140,18 @@ export default function Landing() {
           <div>
             {steps.map((step, i) => (
               <motion.div
-                key={step.index}
+                key={step.title}
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-80px" }}
                 transition={{ duration: 0.6, delay: i * 0.08 }}
-                className="grid grid-cols-[3.5rem_1fr] gap-6 border-t border-border py-10 sm:grid-cols-[5rem_12rem_1fr] sm:gap-10"
+                className="grid grid-cols-[2.5rem_1fr] gap-6 border-t border-border py-10 sm:grid-cols-[3.5rem_14rem_1fr] sm:gap-10"
               >
-                <span className="text-sm tabular-nums text-muted-foreground">
-                  {step.index}
-                </span>
+                <step.icon className="mt-0.5 size-5 text-muted-foreground" />
                 <h3 className="text-lg font-medium tracking-tight">
                   {step.title}
                 </h3>
-                <p className="text-sm leading-6 text-muted-foreground sm:col-span-1 col-span-2 -mt-1 sm:mt-0">
+                <p className="col-span-2 -mt-1 text-sm leading-6 text-muted-foreground sm:col-span-1 sm:mt-0">
                   {step.body}
                 </p>
               </motion.div>
@@ -173,41 +173,25 @@ export default function Landing() {
             <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground">
               It looks like this
             </p>
-            <div className="mt-10 flex items-start justify-between gap-8">
-              <div>
-                <p className="text-base font-medium">Mom</p>
-                <p className="mt-1.5 text-sm text-muted-foreground">
-                  Called during lunch, just to check in.
-                </p>
-                <p className="mt-3 text-xs text-muted-foreground/70">
-                  today · 12:41
-                </p>
+            <div className="mt-10 grid grid-cols-2 gap-4">
+              <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
+                <span className="text-sm text-muted-foreground">
+                  You
+                </span>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 pt-1.5">
-                <span className="size-1.5 rounded-full bg-foreground" />
-                <span className="size-1.5 rounded-full bg-foreground" />
-                <span className="size-1.5 rounded-full bg-foreground" />
-                <span className="size-1.5 rounded-full bg-border" />
-                <span className="size-1.5 rounded-full bg-border" />
+              <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
+                <span className="text-sm text-muted-foreground">
+                  Sam
+                </span>
               </div>
             </div>
-            <div className="mt-10 flex items-start justify-between gap-8 border-t border-border pt-8">
-              <div>
-                <p className="text-base font-medium">Sam, the barista</p>
-                <p className="mt-1.5 text-sm text-muted-foreground">
-                  New place on 5th. Tried their oat latte.
-                </p>
-                <p className="mt-3 text-xs text-muted-foreground/70">
-                  yesterday · 08:15
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5 pt-1.5">
-                <span className="size-1.5 rounded-full bg-foreground" />
-                <span className="size-1.5 rounded-full bg-border" />
-                <span className="size-1.5 rounded-full bg-border" />
-                <span className="size-1.5 rounded-full bg-border" />
-                <span className="size-1.5 rounded-full bg-border" />
-              </div>
+            <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
+              <p className="font-mono text-sm tracking-tight text-muted-foreground">
+                abc-defg-hij
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                in a call together · 12:41
+              </p>
             </div>
           </motion.div>
         </div>
@@ -222,18 +206,14 @@ export default function Landing() {
           transition={{ duration: 0.7 }}
         >
           <h2 className="text-4xl font-extralight tracking-tight sm:text-5xl">
-            Your first hi is waiting.
+            Your next hello is a call away.
           </h2>
           <p className="mx-auto mt-6 max-w-sm text-sm leading-6 text-muted-foreground">
-            No setup, no noise. Just a quiet place to keep every hello.
+            No installs, no accounts for guests. Just a link and a wave.
           </p>
-          <Button
-            asChild
-            size="lg"
-            className="mt-12 h-12 rounded-full px-10"
-          >
+          <Button asChild size="lg" className="mt-12 h-12 rounded-full px-10">
             <Link to={primaryTarget}>
-              Open your journal
+              Open your meetings
               <ArrowRight className="ml-2 size-4" />
             </Link>
           </Button>
@@ -247,7 +227,7 @@ export default function Landing() {
             hiiiiii<span className="text-muted-foreground">.</span>
           </p>
           <p className="text-xs text-muted-foreground">
-            Say hi every day. Build a streak.
+            Peer-to-peer. Private by default.
           </p>
         </div>
       </footer>

@@ -32,14 +32,40 @@ const schema = defineSchema(
       role: v.optional(roleValidator), // role of the user. do not remove
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // a log of hellos: one row per hi the user sent
-    his: defineTable({
-      userId: v.id("users"), // owner of the hi
-      name: v.string(), // who they said hi to
-      note: v.optional(v.string()), // anything worth remembering
-      intensity: v.number(), // how much hi it was, 1-5
-      createdAt: v.number(), // epoch ms
-    }).index("by_user_createdAt", ["userId", "createdAt"]),
+    // a video meeting room, keyed by a human-shareable code
+    rooms: defineTable({
+      code: v.string(), // e.g. "abc-defg-hij"
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]).index("by_createdBy", ["createdBy"]),
+
+    // who is currently in a room (mesh call presence)
+    presence: defineTable({
+      code: v.string(),
+      clientId: v.string(), // per-tab random id
+      name: v.string(),
+      joinedAt: v.number(),
+      lastSeen: v.number(), // heartbeat, used to expire stale rows
+    }).index("by_code", ["code"]),
+
+    // WebRTC signaling relay: offers, answers, ICE candidates, hello/bye
+    signals: defineTable({
+      code: v.string(),
+      from: v.string(),
+      to: v.string(), // a clientId or "*" for broadcast
+      kind: v.string(),
+      payload: v.optional(v.string()), // JSON-encoded sdp / candidate
+      createdAt: v.number(),
+    }).index("by_code_to", ["code", "to"]),
+
+    // in-call chat messages
+    messages: defineTable({
+      code: v.string(),
+      from: v.string(), // clientId
+      name: v.string(),
+      text: v.string(),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
   },
   {
     schemaValidation: false,

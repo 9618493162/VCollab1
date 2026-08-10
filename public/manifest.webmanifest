@@ -1,7 +1,7 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "hiiiiii — video meetings",
+  "short_name": "hiiiiii.",
+  "description": "Say hi, face to face. Peer-to-peer video meetings, minus the fuss.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
