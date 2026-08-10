@@ -351,7 +351,7 @@ function PrefRow({
         <p className="text-sm font-medium">{label}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onChecked} />
+      <Switch checked={checked} onCheckedChange={onChecked} aria-label={label} />
     </div>
   );
 }

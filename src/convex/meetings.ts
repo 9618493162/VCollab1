@@ -22,7 +22,7 @@ async function getRoomByCode(ctx: QueryCtx, code: string) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Clean, dedupe, and cap an invitee email list. */
-function normalizeEmails(raw: string[]): string[] {
+export function normalizeEmails(raw: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const entry of raw) {
