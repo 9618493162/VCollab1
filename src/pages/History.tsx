@@ -294,8 +294,8 @@ export default function History() {
               Cancel “{cancelTarget?.title ?? ""}”?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Attendees will get a notification that the meeting is no longer
-              happening. The meeting code will stop working.
+              Attendees will get an email + in-app notification that the meeting
+              is no longer happening. The meeting code will stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

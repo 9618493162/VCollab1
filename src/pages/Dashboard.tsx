@@ -598,7 +598,7 @@ export default function Dashboard() {
         onScheduled={(code) => {
           setScheduleOpen(false);
           void handleCopy(code);
-          toast.success("Meeting scheduled — invite link copied.");
+          toast.success("Meeting scheduled — invite link copied, emails sent.");
         }}
       />
 
@@ -612,8 +612,8 @@ export default function Dashboard() {
               Cancel “{cancelTarget?.title ?? ""}”?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Attendees will get a notification that the meeting is no longer
-              happening. The meeting code will stop working.
+              Attendees will get an email + in-app notification that the meeting
+              is no longer happening. The meeting code will stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -773,7 +773,8 @@ function ScheduleDialog({
               className="mt-1.5"
             />
             <p className="mt-1.5 text-[11px] text-muted-foreground/70">
-              Registered users get an in-app invitation + a reminder 10 minutes before.
+              Everyone on the list gets an email invite with the join link, an
+              in-app invitation, and a reminder 10 minutes before.
             </p>
           </div>
           <div>

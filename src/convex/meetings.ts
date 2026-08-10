@@ -141,6 +141,21 @@ export const scheduleMeeting = mutation({
       }
     }
 
+    // Send the invite email to every listed attendee (best-effort).
+    try {
+      await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
+        code,
+        kind: "invite",
+        title: cleanTitle,
+        startTime,
+        durationMinutes: duration,
+        description: cleanDesc || undefined,
+        attendees: emails,
+      });
+    } catch {
+      // email is best-effort
+    }
+
     return code;
   },
 });
@@ -188,6 +203,21 @@ export const remindScheduled = internalMutation({
         link: `/call/${normalized}`,
       });
     }
+
+    // Reminder email to everyone on the list (best-effort).
+    try {
+      await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
+        code: normalized,
+        kind: "reminder",
+        title: scheduled.title,
+        startTime: scheduled.startTime,
+        durationMinutes: scheduled.durationMinutes,
+        description: scheduled.description,
+        attendees: scheduled.attendees ?? [],
+      });
+    } catch {
+      // email is best-effort
+    }
   },
 });
 
@@ -225,6 +255,21 @@ export const cancelScheduled = mutation({
         title: `Cancelled: ${scheduled.title}`,
         body: `${when} is no longer happening.`,
       });
+    }
+
+    // Cancellation email to everyone on the list (best-effort).
+    try {
+      await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
+        code: normalized,
+        kind: "cancelled",
+        title: scheduled.title,
+        startTime: scheduled.startTime,
+        durationMinutes: scheduled.durationMinutes,
+        description: scheduled.description,
+        attendees: scheduled.attendees ?? [],
+      });
+    } catch {
+      // email is best-effort
     }
   },
 });
