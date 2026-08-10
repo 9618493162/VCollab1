@@ -112,6 +112,11 @@ export const scheduleMeeting = mutation({
     const invitees = await usersByEmails(ctx, emails.filter((e) => e !== hostEmail));
     const when = new Date(startTime).toLocaleString();
     for (const u of invitees) {
+      const wantsInvites = await ctx.runQuery(internal.settings.shouldNotify, {
+        userId: u._id,
+        type: "invite",
+      });
+      if (!wantsInvites) continue;
       await createNotification(ctx, {
         userId: u._id,
         type: "invite",
@@ -155,15 +160,26 @@ export const remindScheduled = internalMutation({
     if (scheduled === null || scheduled.status !== "scheduled") return;
 
     const when = new Date(scheduled.startTime).toLocaleString();
-    await createNotification(ctx, {
+    const hostWants = await ctx.runQuery(internal.settings.shouldNotify, {
       userId: scheduled.hostId,
       type: "reminder",
-      title: `Meeting soon: ${scheduled.title}`,
-      body: `${when} · code ${normalized}`,
-      link: `/call/${normalized}`,
     });
+    if (hostWants) {
+      await createNotification(ctx, {
+        userId: scheduled.hostId,
+        type: "reminder",
+        title: `Meeting soon: ${scheduled.title}`,
+        body: `${when} · code ${normalized}`,
+        link: `/call/${normalized}`,
+      });
+    }
 
     for (const u of await usersByEmails(ctx, scheduled.attendees ?? [])) {
+      const wantsReminders = await ctx.runQuery(internal.settings.shouldNotify, {
+        userId: u._id,
+        type: "reminder",
+      });
+      if (!wantsReminders) continue;
       await createNotification(ctx, {
         userId: u._id,
         type: "reminder",

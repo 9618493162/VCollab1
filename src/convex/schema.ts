@@ -143,6 +143,20 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_user", ["userId"]),
 
+    // per-user account settings (notifications, language, meeting defaults)
+    userSettings: defineTable({
+      userId: v.id("users"),
+      notifyReminders: v.boolean(),
+      notifyInvites: v.boolean(),
+      notifySummaries: v.boolean(),
+      notifyCollaboration: v.boolean(),
+      language: v.optional(v.string()),
+      timezone: v.optional(v.string()),
+      joinWithMic: v.boolean(),
+      joinWithCam: v.boolean(),
+      updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
     // AI artifacts: transcripts, summaries, action items
     aiData: defineTable({
       code: v.string(),

@@ -19,6 +19,11 @@ async function notifyHost(
 ) {
   const hostId = await ctx.runQuery(internal.aiData.getRoomHost, { code });
   if (hostId === null) return;
+  const wantsSummaries = await ctx.runQuery(internal.settings.shouldNotify, {
+    userId: hostId,
+    type: "ai",
+  });
+  if (!wantsSummaries) return;
   await ctx.runMutation(internal.notifications.push, {
     userId: hostId,
     type: "ai",

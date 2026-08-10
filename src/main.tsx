@@ -16,6 +16,7 @@ const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Call = lazy(() => import("./pages/Call.tsx"));
 const History = lazy(() => import("./pages/History.tsx"));
+const SettingsPage = lazy(() => import("./pages/Settings.tsx"));
 const Collab = lazy(() => import("./pages/Collab.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
@@ -150,6 +151,14 @@ createRoot(document.getElementById("root")!).render(
                   element={
                     <RequireAuth>
                       <History />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <RequireAuth>
+                      <SettingsPage />
                     </RequireAuth>
                   }
                 />

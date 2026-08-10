@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, CheckCheck, History, LayoutGrid, LogOut } from "lucide-react";
+import { Bell, CheckCheck, History, LayoutGrid, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -31,7 +31,11 @@ const TYPE_ICONS: Record<string, string> = {
   ended: "🏁",
 };
 
-export function AppHeader({ active }: { active: "dashboard" | "history" }) {
+export function AppHeader({
+  active,
+}: {
+  active: "dashboard" | "history" | "settings";
+}) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const notifications = useQuery(api.notifications.listNotifications);
@@ -170,6 +174,9 @@ export function AppHeader({ active }: { active: "dashboard" | "history" }) {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/history")}>
                 <History className="mr-2 size-4" /> Meeting history
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/settings")}>
+                <Settings className="mr-2 size-4" /> Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

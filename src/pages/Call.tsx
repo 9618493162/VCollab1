@@ -134,6 +134,20 @@ export default function Call() {
   const lockMeeting = useMutation(api.meetings.lockMeeting);
   const endMeeting = useMutation(api.meetings.endMeeting);
 
+  const settings = useQuery(api.settings.getSettings);
+  const preJoinTouched = useRef(false);
+
+  // Apply "Join with microphone/camera" defaults from Settings once, before the
+  // user interacts with the pre-join toggles (their manual choice always wins).
+  useEffect(() => {
+    if (preJoinTouched.current || entered) return;
+    if (settings === undefined) return;
+    preJoinTouched.current = true;
+    if (settings.joinWithMic === false && call.micOn) call.toggleMic();
+    if (settings.joinWithCam === false && call.camOn) call.toggleCam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, entered]);
+
   const elapsed = useElapsed(call.joinedAt);
   const isMissing = room !== undefined && room === null;
   const isChecking = room === undefined;
@@ -835,7 +849,10 @@ export default function Call() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={call.toggleMic}
+                  onClick={() => {
+                    preJoinTouched.current = true;
+                    call.toggleMic();
+                  }}
                   aria-label={call.micOn ? "Turn off mic" : "Turn on mic"}
                   className={cn(
                     "flex size-11 items-center justify-center rounded-full transition-colors",
@@ -848,7 +865,10 @@ export default function Call() {
                 </button>
                 <button
                   type="button"
-                  onClick={call.toggleCam}
+                  onClick={() => {
+                    preJoinTouched.current = true;
+                    call.toggleCam();
+                  }}
                   aria-label={call.camOn ? "Turn off camera" : "Turn on camera"}
                   className={cn(
                     "flex size-11 items-center justify-center rounded-full transition-colors",
