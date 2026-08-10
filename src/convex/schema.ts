@@ -166,6 +166,18 @@ const schema = defineSchema(
       createdAt: v.number(),
       durationMs: v.optional(v.number()),
     }).index("by_code", ["code"]),
+
+    // meeting files shared via Supabase Storage (metadata lives here, blobs in Supabase)
+    sharedFiles: defineTable({
+      code: v.string(),
+      name: v.string(), // display name
+      path: v.string(), // Supabase storage path
+      size: v.number(),
+      contentType: v.optional(v.string()),
+      uploadedBy: v.string(), // auth subject
+      uploadedByName: v.string(),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
   },
   {
     schemaValidation: false,

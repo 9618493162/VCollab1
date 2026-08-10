@@ -1,6 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { AppHeader } from "@/components/AppHeader";
+import { FileSharingPanel } from "@/components/FileSharingPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,6 +30,7 @@ import {
   GripVertical,
   Loader2,
   MessageSquareText,
+  Paperclip,
   Plus,
   Sparkles,
   Trash2,
@@ -77,7 +79,7 @@ export default function Collab() {
   const { code: rawCode } = useParams();
   const code = extractCode(rawCode ?? "");
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"notes" | "board" | "ai">("notes");
+  const [tab, setTab] = useState<"notes" | "board" | "ai" | "files">("notes");
 
   if (!code) {
     return (
@@ -112,6 +114,7 @@ export default function Collab() {
                 { id: "notes", label: "Notes", icon: FileText },
                 { id: "board", label: "Board", icon: ClipboardList },
                 { id: "ai", label: "AI", icon: Sparkles },
+                { id: "files", label: "Files", icon: Paperclip },
               ] as const
             ).map((t) => (
               <button
@@ -136,6 +139,7 @@ export default function Collab() {
           {tab === "notes" && <NotesTab code={code} />}
           {tab === "board" && <BoardTab code={code} />}
           {tab === "ai" && <AiTab code={code} />}
+          {tab === "files" && <FileSharingPanel code={code} />}
         </div>
       </main>
     </div>
