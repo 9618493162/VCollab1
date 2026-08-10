@@ -96,6 +96,7 @@ const schema = defineSchema(
       description: v.optional(v.string()),
       startTime: v.number(), // epoch ms
       durationMinutes: v.number(),
+      attendees: v.optional(v.array(v.string())), // invitee emails
       status: v.union(
         v.literal("scheduled"),
         v.literal("active"),

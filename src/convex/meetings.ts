@@ -1,13 +1,52 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  MutationCtx,
+  QueryCtx,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { generateRoomCode, normalizeCode } from "./rooms";
+import { createNotification } from "./notifications";
 
 async function getRoomByCode(ctx: QueryCtx, code: string) {
   return await ctx.db
     .query("rooms")
     .withIndex("by_code", (q) => q.eq("code", code))
     .first();
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Clean, dedupe, and cap an invitee email list. */
+function normalizeEmails(raw: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of raw) {
+    const email = entry.trim().toLowerCase();
+    if (EMAIL_RE.test(email) && !seen.has(email)) {
+      seen.add(email);
+      out.push(email);
+    }
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+/** Registered users matching the given emails (best-effort lookup). */
+async function usersByEmails(ctx: MutationCtx | QueryCtx, emails: string[]) {
+  const users: Doc<"users">[] = [];
+  for (const email of emails) {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .first();
+    if (user) users.push(user);
+  }
+  return users;
 }
 
 /**
@@ -20,14 +59,16 @@ export const scheduleMeeting = mutation({
     description: v.optional(v.string()),
     startTime: v.number(),
     durationMinutes: v.number(),
+    attendees: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { title, description, startTime, durationMinutes }) => {
+  handler: async (ctx, { title, description, startTime, durationMinutes, attendees }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in to schedule a meeting");
 
     const cleanTitle = title.trim().slice(0, 80) || "Untitled meeting";
     const cleanDesc = (description ?? "").trim().slice(0, 400);
     const duration = Math.min(Math.max(Math.round(durationMinutes), 5), 480);
+    const emails = normalizeEmails(attendees ?? []);
 
     let code = "";
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -59,11 +100,78 @@ export const scheduleMeeting = mutation({
       description: cleanDesc || undefined,
       startTime,
       durationMinutes: duration,
+      attendees: emails.length > 0 ? emails : undefined,
       status: "scheduled",
       createdAt: Date.now(),
     });
 
+    // Invite registered attendees (best-effort — only users who have an
+    // account matching the email get an in-app invitation).
+    const host = await ctx.db.get(userId);
+    const hostEmail = host?.email?.toLowerCase();
+    const invitees = await usersByEmails(ctx, emails.filter((e) => e !== hostEmail));
+    const when = new Date(startTime).toLocaleString();
+    for (const u of invitees) {
+      await createNotification(ctx, {
+        userId: u._id,
+        type: "invite",
+        title: `You're invited: ${cleanTitle}`,
+        body: `${when} · code ${code}`,
+        link: `/call/${code}`,
+      });
+    }
+
+    // Reminder ~10 minutes before start (best-effort; skipped when the
+    // meeting is too far out to schedule or the scheduler is unavailable).
+    const delay = startTime - 10 * 60_000 - Date.now();
+    if (delay > 0) {
+      try {
+        await ctx.scheduler.runAfter(
+          Math.min(delay, 7 * 24 * 60 * 60_000),
+          internal.meetings.remindScheduled,
+          { code },
+        );
+      } catch {
+        // reminders are best-effort
+      }
+    }
+
     return code;
+  },
+});
+
+/**
+ * One-shot job fired ~10 minutes before a scheduled meeting. Notifies the
+ * host and any registered attendees. No-ops if the meeting was cancelled.
+ */
+export const remindScheduled = internalMutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = normalizeCode(code);
+    const scheduled = await ctx.db
+      .query("scheduledMeetings")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (scheduled === null || scheduled.status !== "scheduled") return;
+
+    const when = new Date(scheduled.startTime).toLocaleString();
+    await createNotification(ctx, {
+      userId: scheduled.hostId,
+      type: "reminder",
+      title: `Meeting soon: ${scheduled.title}`,
+      body: `${when} · code ${normalized}`,
+      link: `/call/${normalized}`,
+    });
+
+    for (const u of await usersByEmails(ctx, scheduled.attendees ?? [])) {
+      await createNotification(ctx, {
+        userId: u._id,
+        type: "reminder",
+        title: `Meeting soon: ${scheduled.title}`,
+        body: `${when} · code ${normalized}`,
+        link: `/call/${normalized}`,
+      });
+    }
   },
 });
 

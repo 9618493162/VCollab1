@@ -473,6 +473,7 @@ function ScheduleDialog({
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState("30");
+  const [attendees, setAttendees] = useState("");
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -493,12 +494,17 @@ function ScheduleDialog({
         description: description || undefined,
         startTime,
         durationMinutes: Number(duration),
+        attendees: attendees
+          .split(/[,;\s]+/)
+          .map((e) => e.trim())
+          .filter(Boolean),
       });
       onScheduled(code);
       setTitle("");
       setDescription("");
       setDate("");
       setTime("");
+      setAttendees("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't schedule.");
     } finally {
@@ -553,6 +559,20 @@ function ScheduleDialog({
                 className="mt-1.5"
               />
             </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Invite by email (optional)
+            </label>
+            <Input
+              value={attendees}
+              onChange={(e) => setAttendees(e.target.value)}
+              placeholder="alice@acme.com, bob@acme.com"
+              className="mt-1.5"
+            />
+            <p className="mt-1.5 text-[11px] text-muted-foreground/70">
+              Registered users get an in-app invitation + a reminder 10 minutes before.
+            </p>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Duration</label>

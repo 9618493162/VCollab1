@@ -25,6 +25,10 @@ const TYPE_ICONS: Record<string, string> = {
   ai: "✨",
   meeting: "📅",
   task: "✅",
+  invite: "📨",
+  reminder: "⏰",
+  starting: "🚀",
+  ended: "🏁",
 };
 
 export function AppHeader({ active }: { active: "dashboard" | "history" }) {
