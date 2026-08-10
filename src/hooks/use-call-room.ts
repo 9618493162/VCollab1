@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
+import type { Id } from "@/convex/_generated/dataModel";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -19,16 +20,47 @@ type Signal = {
   createdAt: number;
 };
 
-export type Participant = { clientId: string; name: string };
+export type Participant = {
+  clientId: string;
+  name: string;
+  sharing?: boolean;
+  handRaised?: boolean;
+};
+
+export type PeerQuality = "good" | "okay" | "poor";
+export type TrackStates = { audio: boolean; video: boolean };
+
+type SpeechRecognitionCtor = new () => {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult:
+    | ((event: {
+        resultIndex: number;
+        results: {
+          length: number;
+          [i: number]: { isFinal: boolean; [j: number]: { transcript: string } };
+        };
+      }) => void)
+    | null;
+  onerror: ((event: unknown) => void) | null;
+};
+
+function getSpeechRecognition(): SpeechRecognitionCtor | null {
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
 
 /**
- * A peer-to-peer mesh call room.
- *
- * Media (mic/cam) is acquired on mount. Once `join()` resolves, the caller is
- * registered in the room and WebRTC connections are opened to every existing
- * participant. The peer with the lexicographically smaller clientId initiates
- * the offer for each pair, so there's never glare. Offers, answers and ICE
- * candidates are relayed through Convex (`call.sendSignal` / `call.listSignals`).
+ * A peer-to-peer mesh call room with real media, signaling via Convex.
+ * Adds: speaking detection, remote mic/cam state, network quality,
+ * raise hand, reactions, live captions (Web Speech API), recording with
+ * AI transcription, and host kick/mute/end handling.
  */
 export function useCallRoom(code: string, name: string) {
   const [clientId] = useState(() =>
@@ -48,19 +80,39 @@ export function useCallRoom(code: string, name: string) {
   const [joined, setJoined] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinedAt, setJoinedAt] = useState<number | null>(null);
-  const [remoteStreams, setRemoteStreams] = useState<
-    Record<string, MediaStream>
-  >({});
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [sharing, setSharing] = useState(false);
   const [shareStream, setShareStream] = useState<MediaStream | null>(null);
+  const [handRaised, setHandRaised] = useState(false);
+  const [kicked, setKicked] = useState(false);
+  const [endedByHost, setEndedByHost] = useState(false);
+  const [remoteTrackStates, setRemoteTrackStates] = useState<Record<string, TrackStates>>({});
+  const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
+  const [quality, setQuality] = useState<Record<string, PeerQuality>>({});
+
+  // ---- captions ----
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  const [captions, setCaptions] = useState<string[]>([]);
+  const [interimCaption, setInterimCaption] = useState("");
+  const [captionError, setCaptionError] = useState<string | null>(null);
+
+  // ---- recording ----
+  const [recording, setRecording] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState<
+    "idle" | "recording" | "processing" | "ready" | "error"
+  >("idle");
+  const [recordingError, setRecordingError] = useState<string | null>(null);
 
   const pcRef = useRef(new Map<string, RTCPeerConnection>());
   const streamRef = useRef(new Map<string, MediaStream>());
   const pendingIceRef = useRef(new Map<string, RTCIceCandidateInit[]>());
   const processedRef = useRef(new Set<string>());
   const joinedRef = useRef(false);
+  const handRaisedRef = useRef(false);
   const shareStreamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // ---- convex ----
   const joinRoom = useMutation(api.call.joinRoom);
@@ -69,29 +121,23 @@ export function useCallRoom(code: string, name: string) {
   const sendSignal = useMutation(api.call.sendSignal);
   const sendMessage = useMutation(api.call.sendMessage);
   const announceSharing = useMutation(api.call.setSharing);
+  const setHandRaisedM = useMutation(api.call.setHandRaised);
+  const sendReaction = useMutation(api.call.sendReaction);
+  const generateUploadUrl = useMutation(api.rooms.generateUploadUrl);
+  const saveRecording = useMutation(api.call.saveRecording);
+  const transcribeMeeting = useAction(api.ai.transcribeMeeting);
 
-  const signals = useQuery(
-    api.call.listSignals,
-    joined ? { code, to: clientId } : "skip",
-  );
-  const participants = useQuery(
-    api.call.listParticipants,
-    joined ? { code } : "skip",
-  );
-  const messages = useQuery(
-    api.call.listMessages,
-    joined ? { code } : "skip",
-  );
+  const signals = useQuery(api.call.listSignals, joined ? { code, to: clientId } : "skip");
+  const participants = useQuery(api.call.listParticipants, joined ? { code } : "skip");
+  const messages = useQuery(api.call.listMessages, joined ? { code } : "skip");
+  const reactions = useQuery(api.call.listReactions, joined ? { code } : "skip");
 
   // ---- acquire media on mount ----
   useEffect(() => {
     let cancelled = false;
     async function acquire() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -100,9 +146,7 @@ export function useCallRoom(code: string, name: string) {
         setLocalStream(stream);
       } catch {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           if (cancelled) {
             stream.getTracks().forEach((t) => t.stop());
             return;
@@ -111,9 +155,7 @@ export function useCallRoom(code: string, name: string) {
           setLocalStream(stream);
           setCamOn(false);
         } catch {
-          if (!cancelled) {
-            setMediaError("No camera or microphone available.");
-          }
+          if (!cancelled) setMediaError("No camera or microphone available.");
         }
       }
     }
@@ -141,6 +183,18 @@ export function useCallRoom(code: string, name: string) {
       delete next[peerId];
       return next;
     });
+    setRemoteTrackStates((prev) => {
+      if (!(peerId in prev)) return prev;
+      const next = { ...prev };
+      delete next[peerId];
+      return next;
+    });
+    setSpeaking((prev) => {
+      if (!(peerId in prev)) return prev;
+      const next = { ...prev };
+      delete next[peerId];
+      return next;
+    });
   }, []);
 
   /** Get (or create) the peer connection to another participant. */
@@ -154,9 +208,7 @@ export function useCallRoom(code: string, name: string) {
 
       const local = localStreamRef.current;
       if (local) {
-        for (const track of local.getTracks()) {
-          pc.addTrack(track, local);
-        }
+        for (const track of local.getTracks()) pc.addTrack(track, local);
       }
 
       pc.onicecandidate = (event) => {
@@ -177,9 +229,33 @@ export function useCallRoom(code: string, name: string) {
           stream = new MediaStream();
           streamRef.current.set(peerId, stream);
         }
-        for (const track of event.streams[0]?.getTracks() ?? [event.track]) {
+        const tracks = event.streams[0]?.getTracks() ?? [event.track];
+        for (const track of tracks) {
           if (!stream.getTracks().includes(track)) stream.addTrack(track);
         }
+
+        // track mic/cam state from mute events on the receiver side
+        const states: TrackStates = { audio: false, video: false };
+        for (const track of tracks) {
+          if (track.kind === "audio") {
+            states.audio = true;
+            track.onmute = () =>
+              setRemoteTrackStates((p) => ({ ...p, [peerId]: { ...p[peerId], audio: false } }));
+            track.onunmute = () =>
+              setRemoteTrackStates((p) => ({ ...p, [peerId]: { ...p[peerId], audio: true } }));
+          }
+          if (track.kind === "video") {
+            states.video = true;
+            track.onmute = () =>
+              setRemoteTrackStates((p) => ({ ...p, [peerId]: { ...p[peerId], video: false } }));
+            track.onunmute = () =>
+              setRemoteTrackStates((p) => ({ ...p, [peerId]: { ...p[peerId], video: true } }));
+          }
+        }
+        setRemoteTrackStates((prev) => ({
+          ...prev,
+          [peerId]: { ...prev[peerId], ...states },
+        }));
         setRemoteStreams((prev) => ({ ...prev, [peerId]: stream! }));
       };
 
@@ -188,20 +264,33 @@ export function useCallRoom(code: string, name: string) {
     [clientId, code, sendSignal],
   );
 
-  const flushPendingIce = useCallback(
-    async (peerId: string, pc: RTCPeerConnection) => {
-      const pending = pendingIceRef.current.get(peerId) ?? [];
-      pendingIceRef.current.delete(peerId);
-      for (const candidate of pending) {
-        try {
-          await pc.addIceCandidate(candidate);
-        } catch {
-          // ignore invalid candidates
-        }
+  const flushPendingIce = useCallback(async (peerId: string, pc: RTCPeerConnection) => {
+    const pending = pendingIceRef.current.get(peerId) ?? [];
+    pendingIceRef.current.delete(peerId);
+    for (const candidate of pending) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch {
+        // ignore invalid candidates
       }
-    },
-    [],
-  );
+    }
+  }, []);
+
+  const leave = useCallback(async () => {
+    if (!joinedRef.current) return;
+    joinedRef.current = false;
+    setJoined(false);
+    recorderRef.current?.stop();
+    for (const pc of pcRef.current.values()) pc.close();
+    pcRef.current.clear();
+    streamRef.current.clear();
+    pendingIceRef.current.clear();
+    setRemoteStreams({});
+    setSpeaking({});
+    setQuality({});
+    setCaptionsEnabled(false);
+    await leaveRoom({ code, clientId });
+  }, [code, clientId, leaveRoom]);
 
   const handleSignal = useCallback(
     async (sig: Signal) => {
@@ -214,11 +303,7 @@ export function useCallRoom(code: string, name: string) {
       }
 
       if (sig.kind === "hello") {
-        setNames((prev) => ({
-          ...prev,
-          [sig.from]: String(payload.name ?? "Guest"),
-        }));
-        // smaller clientId initiates: if we're smaller, open the connection
+        setNames((prev) => ({ ...prev, [sig.from]: String(payload.name ?? "Guest") }));
         if (clientId < sig.from) {
           const pc = ensurePeer(sig.from);
           try {
@@ -238,9 +323,7 @@ export function useCallRoom(code: string, name: string) {
       } else if (sig.kind === "offer") {
         const pc = ensurePeer(sig.from);
         try {
-          await pc.setRemoteDescription(
-            payload as unknown as RTCSessionDescriptionInit,
-          );
+          await pc.setRemoteDescription(payload as unknown as RTCSessionDescriptionInit);
           await flushPendingIce(sig.from, pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
@@ -252,15 +335,12 @@ export function useCallRoom(code: string, name: string) {
             payload: JSON.stringify(pc.localDescription),
           });
         } catch {
-          // could not answer; drop the peer
           removePeer(sig.from);
         }
       } else if (sig.kind === "answer") {
         const pc = ensurePeer(sig.from);
         try {
-          await pc.setRemoteDescription(
-            payload as unknown as RTCSessionDescriptionInit,
-          );
+          await pc.setRemoteDescription(payload as unknown as RTCSessionDescriptionInit);
           await flushPendingIce(sig.from, pc);
         } catch {
           // stale answer; ignore
@@ -280,9 +360,19 @@ export function useCallRoom(code: string, name: string) {
         }
       } else if (sig.kind === "bye") {
         removePeer(sig.from);
+      } else if (sig.kind === "kick") {
+        setKicked(true);
+        void leave();
+      } else if (sig.kind === "end") {
+        setEndedByHost(true);
+        recorderRef.current?.stop();
+        void leave();
+      } else if (sig.kind === "mute") {
+        localStreamRef.current?.getAudioTracks().forEach((t) => (t.enabled = false));
+        setMicOn(false);
       }
     },
-    [clientId, code, ensurePeer, flushPendingIce, removePeer, sendSignal],
+    [clientId, code, ensurePeer, flushPendingIce, leave, removePeer, sendSignal],
   );
 
   // ---- process the reactive signal feed ----
@@ -304,11 +394,152 @@ export function useCallRoom(code: string, name: string) {
     return () => clearInterval(id);
   }, [joined, code, clientId, heartbeat]);
 
+  // ---- speaking detection from remote audio levels ----
+  useEffect(() => {
+    const entries = Object.entries(remoteStreams);
+    if (entries.length === 0) return;
+    let ctx: AudioContext | null = null;
+    const analysers = new Map<string, { analyser: AnalyserNode; source: MediaStreamAudioSourceNode }>();
+    try {
+      ctx = new AudioContext();
+      for (const [peerId, stream] of entries) {
+        if (!stream.getAudioTracks()[0]) continue;
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        analysers.set(peerId, { analyser, source });
+      }
+    } catch {
+      return; // audio analysis unavailable; skip speaking detection
+    }
+    if (analysers.size === 0) {
+      void ctx?.close();
+      return;
+    }
+    const data = new Uint8Array(512);
+    const clearTimers = new Map<string, number>();
+    const id = window.setInterval(() => {
+      for (const [peerId, { analyser }] of analysers) {
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        if (sum / data.length > 5) {
+          setSpeaking((prev) => (prev[peerId] ? prev : { ...prev, [peerId]: true }));
+          const timer = clearTimers.get(peerId);
+          if (timer) window.clearTimeout(timer);
+          clearTimers.set(
+            peerId,
+            window.setTimeout(() => {
+              setSpeaking((prev) => {
+                if (!prev[peerId]) return prev;
+                const next = { ...prev };
+                delete next[peerId];
+                return next;
+              });
+            }, 700),
+          );
+        }
+      }
+    }, 250);
+    return () => {
+      window.clearInterval(id);
+      clearTimers.forEach((t) => window.clearTimeout(t));
+      analysers.forEach(({ source }) => source.disconnect());
+      void ctx?.close();
+    };
+  }, [remoteStreams]);
+
+  // ---- network quality via peer connection stats ----
+  useEffect(() => {
+    if (!joined) return;
+    const id = window.setInterval(() => {
+      for (const [peerId, pc] of pcRef.current) {
+        pc.getStats()
+          .then((stats) => {
+            type Inbound = { type: string; kind?: string; packetsLost?: number; packetsReceived?: number };
+            type Pair = { type: string; nominated?: boolean; currentRoundTripTime?: number };
+            let loss = 0;
+            let rtt = 0;
+            stats.forEach((s) => {
+              const inbound = s as Inbound;
+              if (
+                inbound.type === "inbound-rtp" &&
+                inbound.kind === "audio" &&
+                typeof inbound.packetsLost === "number" &&
+                typeof inbound.packetsReceived === "number" &&
+                inbound.packetsLost + inbound.packetsReceived > 0
+              ) {
+                loss = inbound.packetsLost / (inbound.packetsLost + inbound.packetsReceived);
+              }
+              const pair = s as Pair;
+              if (pair.type === "candidate-pair" && pair.nominated && typeof pair.currentRoundTripTime === "number") {
+                rtt = pair.currentRoundTripTime * 1000;
+              }
+            });
+            const q: PeerQuality = loss > 0.15 || rtt > 400 ? "poor" : loss > 0.05 || rtt > 200 ? "okay" : "good";
+            setQuality((prev) => (prev[peerId] === q ? prev : { ...prev, [peerId]: q }));
+          })
+          .catch(() => {
+            // stats unavailable; ignore
+          });
+      }
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [joined]);
+
+  // ---- live captions via the Web Speech API (no fake text) ----
+  useEffect(() => {
+    if (!captionsEnabled || !joined) return;
+    const Ctor = getSpeechRecognition();
+    if (!Ctor) {
+      setCaptionError("Live captions aren't supported in this browser (try Chrome or Edge).");
+      setCaptionsEnabled(false);
+      return;
+    }
+    const rec = new Ctor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          setCaptions((prev) => {
+            const next = [...prev, result[0].transcript.trim()].filter(Boolean);
+            return next.slice(-60);
+          });
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      setInterimCaption(interim);
+    };
+    rec.onerror = () => {
+      // transient errors (e.g. no speech); keep going
+    };
+    try {
+      rec.start();
+    } catch {
+      setCaptionError("Couldn't start live captions in this browser.");
+      setCaptionsEnabled(false);
+    }
+    return () => {
+      try {
+        rec.stop();
+      } catch {
+        // already stopped
+      }
+    };
+  }, [captionsEnabled, joined]);
+
   // ---- teardown on unmount ----
   useEffect(() => {
     const pcs = pcRef.current;
     const streams = streamRef.current;
     return () => {
+      recorderRef.current?.stop();
       for (const pc of pcs.values()) pc.close();
       pcs.clear();
       streams.clear();
@@ -326,12 +557,9 @@ export function useCallRoom(code: string, name: string) {
       setJoinError(null);
 
       const nameMap: Record<string, string> = { [clientId]: name };
-      for (const other of others) {
-        nameMap[other.clientId] = other.name;
-      }
+      for (const other of others) nameMap[other.clientId] = other.name;
       setNames(nameMap);
 
-      // offer to every peer where we're the smaller clientId
       for (const other of others) {
         if (clientId < other.clientId) {
           const pc = ensurePeer(other.clientId);
@@ -351,23 +579,9 @@ export function useCallRoom(code: string, name: string) {
         }
       }
     } catch (error) {
-      setJoinError(
-        error instanceof Error ? error.message : "Couldn't join the meeting.",
-      );
+      setJoinError(error instanceof Error ? error.message : "Couldn't join the meeting.");
     }
   }, [clientId, code, ensurePeer, joinRoom, name, sendSignal]);
-
-  const leave = useCallback(async () => {
-    if (!joinedRef.current) return;
-    joinedRef.current = false;
-    setJoined(false);
-    for (const pc of pcRef.current.values()) pc.close();
-    pcRef.current.clear();
-    streamRef.current.clear();
-    pendingIceRef.current.clear();
-    setRemoteStreams({});
-    await leaveRoom({ code, clientId });
-  }, [code, clientId, leaveRoom]);
 
   const toggleMic = useCallback(() => {
     const next = !micOn;
@@ -381,6 +595,13 @@ export function useCallRoom(code: string, name: string) {
     setCamOn(next);
   }, [localStream, camOn]);
 
+  const toggleHand = useCallback(() => {
+    const next = !handRaisedRef.current;
+    handRaisedRef.current = next;
+    setHandRaised(next);
+    void setHandRaisedM({ code, clientId, raised: next });
+  }, [clientId, code, setHandRaisedM]);
+
   const stopSharing = useCallback(async () => {
     const camTrack = localStreamRef.current?.getVideoTracks()[0];
     for (const pc of pcRef.current.values()) {
@@ -392,7 +613,7 @@ export function useCallRoom(code: string, name: string) {
     setShareStream(null);
     setSharing(false);
     void announceSharing({ code, clientId, sharing: false });
-  }, [clientId, code, announceSharing]);
+  }, [announceSharing, clientId, code]);
 
   const toggleShare = useCallback(async () => {
     if (sharing) {
@@ -400,9 +621,7 @@ export function useCallRoom(code: string, name: string) {
       return;
     }
     try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-      });
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const videoTrack = screenStream.getVideoTracks()[0];
       videoTrack.onended = () => void stopSharing();
       shareStreamRef.current = screenStream;
@@ -416,7 +635,7 @@ export function useCallRoom(code: string, name: string) {
     } catch {
       // user cancelled the picker
     }
-  }, [sharing, stopSharing, clientId, code, announceSharing]);
+  }, [announceSharing, clientId, code, sharing, stopSharing]);
 
   const postMessage = useCallback(
     async (text: string) => {
@@ -430,6 +649,84 @@ export function useCallRoom(code: string, name: string) {
     },
     [clientId, code, name, sendMessage],
   );
+
+  const fireReaction = useCallback(
+    (emoji: string) => {
+      void sendReaction({ code, clientId, emoji, name });
+    },
+    [clientId, code, name, sendReaction],
+  );
+
+  // ---- recording: mix local + remote audio, upload, then transcribe ----
+  const startRecording = useCallback(async () => {
+    if (recorderRef.current) return;
+    const mixed = new MediaStream();
+    localStreamRef.current?.getAudioTracks().forEach((t) => mixed.addTrack(t));
+    for (const stream of streamRef.current.values()) {
+      stream.getAudioTracks().forEach((t) => mixed.addTrack(t));
+    }
+    if (mixed.getAudioTracks().length === 0) {
+      setRecordingStatus("error");
+      setRecordingError("No audio tracks to record — enable your microphone.");
+      return;
+    }
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "";
+    const rec = new MediaRecorder(mixed, mime ? { mimeType: mime } : undefined);
+    chunksRef.current = [];
+    const startedAt = Date.now();
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    rec.onstop = () => {
+      recorderRef.current = null;
+      const blob = new Blob(chunksRef.current, { type: mime || "audio/webm" });
+      if (blob.size === 0) {
+        setRecordingStatus("error");
+        setRecordingError("Recording came back empty.");
+        return;
+      }
+      void (async () => {
+        setRecordingStatus("processing");
+        try {
+          const uploadUrl = await generateUploadUrl();
+          const put = await fetch(uploadUrl, { method: "PUT", body: blob });
+          if (!put.ok) throw new Error("Upload failed.");
+          const storageId = (new URL(uploadUrl).pathname.split("/").pop() ?? "") as Id<"_storage">;
+          await saveRecording({
+            code,
+            storageId,
+            durationMs: Date.now() - startedAt,
+          });
+          try {
+            await transcribeMeeting({ code, storageId });
+          } catch (error) {
+            setRecordingError(
+              error instanceof Error ? error.message : "Transcription failed.",
+            );
+          }
+          setRecordingStatus("ready");
+        } catch (error) {
+          setRecordingStatus("error");
+          setRecordingError(
+            error instanceof Error ? error.message : "Couldn't save the recording.",
+          );
+        }
+      })();
+    };
+    rec.start();
+    recorderRef.current = rec;
+    setRecording(true);
+    setRecordingStatus("recording");
+    setRecordingError(null);
+  }, [code, generateUploadUrl, saveRecording, transcribeMeeting]);
+
+  const stopRecording = useCallback(() => {
+    if (!recorderRef.current) return;
+    recorderRef.current.stop();
+    setRecording(false);
+  }, []);
 
   return {
     clientId,
@@ -447,10 +744,29 @@ export function useCallRoom(code: string, name: string) {
     sharing,
     shareStream,
     toggleShare,
+    handRaised,
+    toggleHand,
     remoteStreams,
     names,
     participants,
+    remoteTrackStates,
+    speaking,
+    quality,
     messages,
     postMessage,
+    reactions,
+    fireReaction,
+    captionsEnabled,
+    toggleCaptions: () => setCaptionsEnabled((v) => !v),
+    captions,
+    interimCaption,
+    captionError,
+    recording,
+    recordingStatus,
+    recordingError,
+    startRecording,
+    stopRecording,
+    kicked,
+    endedByHost,
   };
 }

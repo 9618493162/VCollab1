@@ -1,11 +1,34 @@
 import { motion } from "framer-motion";
-import { ArrowRight, MonitorUp, ShieldCheck, Users } from "lucide-react";
-import { Link } from "react-router";
+import {
+  ArrowRight,
+  Bot,
+  Captions,
+  ClipboardList,
+  FileText,
+  Globe2,
+  KanbanSquare,
+  Lock,
+  MessageSquare,
+  MicOff,
+  MonitorUp,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Video,
+  Zap,
+} from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const fadeUp = {
-  initial: { opacity: 0, y: 16 },
+  initial: { opacity: 0, y: 24 },
   animate: { opacity: 1, y: 0 },
 };
 
@@ -15,222 +38,531 @@ const transition = (delay: number) => ({
   ease: [0.22, 1, 0.36, 1] as const,
 });
 
-const steps = [
-  {
-    icon: Users,
-    title: "Start a meeting",
-    body: "One click gets you a shareable code — abc-defg-hij style. No signup for guests.",
-  },
-  {
-    icon: MonitorUp,
-    title: "Talk face to face",
-    body: "Crisp peer-to-peer video straight from your browser. Mic, camera, and screen share, all on.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Nothing is stored",
-    body: "Your words travel directly between participants. No recording, no retention, no noise.",
-  },
+const FEATURES = [
+  { icon: Video, title: "HD video", body: "Crisp, low-latency peer-to-peer video that just works — straight from your browser." },
+  { icon: MonitorUp, title: "Screen sharing", body: "Present a tab, window, or your whole screen with one click." },
+  { icon: Sparkles, title: "AI meeting summaries", body: "Transcribe the call and get a clean summary with decisions and follow-ups." },
+  { icon: MessageSquare, title: "Real-time chat", body: "A persistent chat with timestamps that stays with the meeting." },
+  { icon: KanbanSquare, title: "Smart collaboration", body: "Shared notes and a Kanban board that keep the meeting moving." },
+  { icon: ShieldCheck, title: "Secure meetings", body: "Lock rooms, kick intruders, and keep every meeting private by default." },
+  { icon: Captions, title: "Live captions", body: "Real-time captions powered by your browser — no setup required." },
+  { icon: Globe2, title: "Global collaboration", body: "Anyone with the link joins in seconds. No installs, no accounts for guests." },
+];
+
+const STEPS = [
+  { n: "01", title: "Create or join a meeting", body: "One click starts a call with a shareable code like VC-7K4P-92X. Guests join from the link — no signup needed." },
+  { n: "02", title: "Collaborate in real time", body: "Video, screen share, reactions, raise hand, chat, shared notes, and a live Kanban board — all in the same room." },
+  { n: "03", title: "Get AI-powered insights", body: "Record the call and get a transcript, a summary, and action items — then ask the meeting questions afterwards." },
 ];
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [joinCode, setJoinCode] = useState("");
   const primaryTarget = isAuthenticated ? "/dashboard" : "/auth";
 
+  const handleJoin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const match = joinCode
+      .toLowerCase()
+      .match(/([a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3})/);
+    if (!match) {
+      toast.error("That doesn't look like a meeting code.");
+      return;
+    }
+    navigate(`/call/${match[1]}`);
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased">
-      {/* Nav */}
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/70 bg-background/85 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
-          <Link
-            to="/"
-            className="text-[15px] font-semibold tracking-tight text-foreground"
-          >
-            hiiiiii<span className="text-muted-foreground">.</span>
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground antialiased">
+      {/* ---------- nav ---------- */}
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-background/70 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <Link to="/">
+            <Logo />
           </Link>
-          <nav className="flex items-center gap-8 text-sm">
-            <a
-              href="#how"
-              className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block"
-            >
+          <nav className="flex items-center gap-6 text-sm">
+            <a href="#features" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
+              Features
+            </a>
+            <a href="#how" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
               How it works
             </a>
+            <a href="#ai" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
+              AI
+            </a>
+            <ThemeToggle />
             <Link
               to={primaryTarget}
-              className="font-medium text-foreground transition-opacity hover:opacity-60"
+              className="rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-1.5 font-medium text-white shadow-md transition-all hover:shadow-lg hover:brightness-110"
             >
-              {isAuthenticated ? "Meetings" : "Sign in"}
+              {isAuthenticated ? "Open meetings" : "Sign in"}
             </Link>
           </nav>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center">
+      {/* ---------- hero ---------- */}
+      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 pt-24 text-center sm:px-6">
+        {/* aurora background */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="aurora-blob absolute -top-32 left-1/4 h-[480px] w-[480px] rounded-full bg-indigo-600/25 blur-[130px]" />
+          <div className="aurora-blob absolute -right-24 top-1/4 h-[420px] w-[420px] rounded-full bg-fuchsia-500/20 blur-[130px]" style={{ animationDelay: "-6s" }} />
+          <div className="aurora-blob absolute -bottom-40 left-1/3 h-[400px] w-[400px] rounded-full bg-violet-600/20 blur-[130px]" style={{ animationDelay: "-12s" }} />
+          <div className="hero-grid absolute inset-0" />
+        </div>
+
         <motion.p
           {...fadeUp}
           transition={transition(0.05)}
-          className="mb-8 text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground"
+          className="relative mb-7 flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.25em] text-primary"
         >
-          Video meetings, minus the fuss
+          <Zap className="size-3" /> Realtime video for teams
         </motion.p>
 
         <motion.h1
           {...fadeUp}
           transition={transition(0.15)}
-          className="text-[clamp(3rem,13vw,10rem)] font-extralight leading-none tracking-[-0.05em]"
+          className="relative font-display text-[clamp(2.8rem,9vw,7rem)] font-extrabold leading-[1.02] tracking-tight"
         >
-          say hi,
+          Connect.
           <br />
-          face to face<span className="text-muted-foreground/70">.</span>
+          Collaborate.
+          <br />
+          <span className="text-gradient">Create.</span>
         </motion.h1>
 
         <motion.p
           {...fadeUp}
           transition={transition(0.25)}
-          className="mt-10 max-w-md text-[15px] leading-7 text-muted-foreground"
+          className="relative mt-8 max-w-xl text-[15px] leading-7 text-muted-foreground sm:text-base"
         >
-          A quiet little meeting app. Start a call, share a code, and talk —
-          peer-to-peer, right in your browser. Nothing is recorded or stored.
+          VCollab is a premium video collaboration platform — real peer-to-peer
+          meetings, live captions, shared notes, Kanban boards, and AI
+          summaries that write themselves. Private by default, effortless to
+          share.
         </motion.p>
 
         <motion.div
           {...fadeUp}
           transition={transition(0.35)}
-          className="mt-12 flex flex-col items-center gap-4 sm:flex-row"
+          className="relative mt-10 flex flex-col items-center gap-3 sm:flex-row"
         >
-          <Button asChild size="lg" className="h-12 rounded-full px-8">
+          <Button asChild size="lg" className="h-12 rounded-full px-8 btn-glow">
             <Link to={primaryTarget}>
-              Start a meeting
-              <ArrowRight className="ml-2 size-4" />
+              Start a meeting <ArrowRight className="ml-2 size-4" />
             </Link>
           </Button>
-          <Button
-            asChild
-            variant="ghost"
-            size="lg"
-            className="h-12 rounded-full px-8 text-muted-foreground hover:text-foreground"
-          >
-            <a href="#how">How it works</a>
+          <a href="#join" className="h-12 rounded-full">
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-12 w-full rounded-full px-8 sm:w-auto"
+            >
+              Join a meeting
+            </Button>
+          </a>
+        </motion.div>
+
+        {/* join input */}
+        <motion.form
+          {...fadeUp}
+          transition={transition(0.45)}
+          id="join"
+          onSubmit={handleJoin}
+          className="relative mt-16 flex w-full max-w-md items-center gap-2 rounded-2xl border border-border/60 bg-card/50 p-2 shadow-xl backdrop-blur-xl"
+        >
+          <Input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="Enter a code or link — e.g. abc-defg-hij"
+            className="h-11 flex-1 border-0 bg-transparent px-3 font-mono text-sm shadow-none focus-visible:ring-0"
+          />
+          <Button type="submit" className="h-11 shrink-0 rounded-xl px-5">
+            Join <ArrowRight className="ml-1.5 size-4" />
           </Button>
+        </motion.form>
+
+        {/* animated meeting visual */}
+        <motion.div
+          initial={{ opacity: 0, y: 60, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ delay: 0.6, duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+          className="relative mt-20 w-full max-w-3xl"
+          style={{ perspective: 1200 }}
+        >
+          <div
+            className="ring-gradient glass relative rounded-3xl p-3 shadow-2xl"
+            style={{ transform: "rotateX(6deg)" }}
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { name: "You", color: "from-indigo-500/30 to-violet-500/20", self: true },
+                { name: "Aarav", color: "from-emerald-500/25 to-teal-500/15" },
+                { name: "Maya", color: "from-amber-500/25 to-orange-500/15", speaking: true },
+                { name: "Jon", color: "from-sky-500/25 to-blue-500/15" },
+              ].map((tile, i) => (
+                <motion.div
+                  key={tile.name}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 + i * 0.12 }}
+                  className={cn(
+                    "relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br",
+                    tile.color,
+                    tile.speaking && "ring-2 ring-primary",
+                  )}
+                >
+                  <span className="text-2xl font-extralight text-white/80">
+                    {tile.name[0]}
+                  </span>
+                  <span className="absolute bottom-1.5 left-2 flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] text-white/90 backdrop-blur-sm">
+                    {tile.name}
+                    {tile.self && " (you)"}
+                    {i === 2 && <MicOff className="size-2.5" />}
+                  </span>
+                  {tile.speaking && (
+                    <span className="absolute right-1.5 top-1.5 rounded-md bg-primary/80 px-1.5 py-0.5 text-[9px] font-medium text-white">
+                      speaking
+                    </span>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-2xl bg-black/20 px-4 py-2.5 text-xs text-white/70">
+              <span className="font-mono tracking-tight">VC-7K4P-92X</span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+                live · 12:41
+              </span>
+            </div>
+          </div>
+
+          {/* floating cards */}
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 1.2, duration: 0.8 }}
+            className="float-slow absolute -right-4 -top-8 hidden w-44 rounded-2xl border border-border/60 bg-card/90 p-3 shadow-2xl backdrop-blur-xl sm:block"
+          >
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+              <Sparkles className="size-3 text-primary" /> AI summary
+            </p>
+            <p className="mt-1.5 text-xs leading-5">
+              "Launch beta testing next week…"
+            </p>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 1.4, duration: 0.8 }}
+            className="float-slow absolute -bottom-10 -left-6 hidden w-40 rounded-2xl border border-border/60 bg-card/90 p-3 shadow-2xl backdrop-blur-xl sm:block"
+            style={{ animationDelay: "-3s" }}
+          >
+            <p className="text-[11px] font-semibold text-muted-foreground">Live captions</p>
+            <p className="mt-1.5 text-xs italic leading-5">"…ship the onboarding flow this week."</p>
+          </motion.div>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.9, duration: 1 }}
-          className="absolute bottom-10 flex flex-col items-center gap-3"
+          transition={{ delay: 1.8, duration: 1 }}
+          className="relative mt-16 flex flex-col items-center gap-3"
         >
           <span className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground/60">
             keep going
           </span>
-          <span className="h-10 w-px bg-border" />
+          <span className="h-10 w-px bg-gradient-to-b from-muted-foreground/50 to-transparent" />
         </motion.div>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="scroll-mt-24 px-6 pb-32 pt-8">
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-14 border-t border-border pt-10">
-            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground">
-              How it works
+      {/* ---------- features ---------- */}
+      <section id="features" className="relative scroll-mt-20 px-4 py-24 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            {...fadeUp}
+            whileInView={fadeUp.animate}
+            viewport={{ once: true, margin: "-80px" }}
+            className="text-center"
+          >
+            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-primary">
+              Everything a meeting needs
             </p>
-          </div>
+            <h2 className="mt-4 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+              One room, every tool.
+            </h2>
+          </motion.div>
 
-          <div>
-            {steps.map((step, i) => (
+          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {FEATURES.map((f, i) => (
               <motion.div
-                key={step.title}
-                initial={{ opacity: 0, y: 16 }}
+                key={f.title}
+                initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                transition={{ duration: 0.6, delay: i * 0.08 }}
-                className="grid grid-cols-[2.5rem_1fr] gap-6 border-t border-border py-10 sm:grid-cols-[3.5rem_14rem_1fr] sm:gap-10"
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.5, delay: (i % 4) * 0.07 }}
+                className="glass group rounded-2xl p-5 transition-all hover:-translate-y-1.5 hover:shadow-xl"
               >
-                <step.icon className="mt-0.5 size-5 text-muted-foreground" />
-                <h3 className="text-lg font-medium tracking-tight">
-                  {step.title}
-                </h3>
-                <p className="col-span-2 -mt-1 text-sm leading-6 text-muted-foreground sm:col-span-1 sm:mt-0">
-                  {step.body}
-                </p>
+                <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 text-primary transition-transform group-hover:scale-110">
+                  <f.icon className="size-5" />
+                </div>
+                <h3 className="mt-4 font-display text-base font-semibold">{f.title}</h3>
+                <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{f.body}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Example */}
-      <section className="px-6 pb-32">
-        <div className="mx-auto max-w-3xl">
+      {/* ---------- how it works ---------- */}
+      <section id="how" className="scroll-mt-20 border-t border-border/60 px-4 py-24 sm:px-6">
+        <div className="mx-auto max-w-6xl">
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            {...fadeUp}
+            whileInView={fadeUp.animate}
             viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.7 }}
-            className="border border-border p-10 sm:p-14"
+            className="text-center"
           >
-            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground">
-              It looks like this
+            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-primary">
+              How it works
             </p>
-            <div className="mt-10 grid grid-cols-2 gap-4">
-              <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
-                <span className="text-sm text-muted-foreground">
-                  You
+            <h2 className="mt-4 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+              From hello to summary in minutes.
+            </h2>
+          </motion.div>
+
+          <div className="mt-14 grid gap-4 md:grid-cols-3">
+            {STEPS.map((s, i) => (
+              <motion.div
+                key={s.n}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.55, delay: i * 0.12 }}
+                className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/50 p-6 transition-all hover:-translate-y-1 hover:shadow-xl"
+              >
+                <span className="font-display text-5xl font-extrabold text-gradient opacity-90">
+                  {s.n}
                 </span>
+                <h3 className="mt-4 font-display text-lg font-semibold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{s.body}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- AI ---------- */}
+      <section id="ai" className="scroll-mt-20 px-4 py-24 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            {...fadeUp}
+            whileInView={fadeUp.animate}
+            viewport={{ once: true, margin: "-80px" }}
+            className="relative overflow-hidden rounded-3xl border border-primary/25 bg-gradient-to-br from-indigo-950/60 via-background to-violet-950/40 p-8 sm:p-14"
+          >
+            <div className="aurora-blob pointer-events-none absolute -right-20 -top-24 size-96 rounded-full bg-primary/25 blur-[110px]" />
+            <div className="relative grid items-center gap-10 lg:grid-cols-2">
+              <div>
+                <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.3em] text-primary">
+                  <Sparkles className="size-3.5" /> AI-native
+                </p>
+                <h2 className="mt-4 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+                  Your meeting, <span className="text-gradient">already summarized</span>.
+                </h2>
+                <p className="mt-5 max-w-md text-[15px] leading-7 text-muted-foreground">
+                  Record the call and VCollab transcribes it with speaker
+                  labels, distills the summary, extracts action items, and lets
+                  you ask the meeting anything afterwards.
+                </p>
+                <ul className="mt-7 space-y-3 text-sm">
+                  {[
+                    ["Captions", "Live captions in the call, powered by your browser."],
+                    ["Transcript", "Speaker-labeled transcription via AssemblyAI."],
+                    ["Summary & action items", "Overview, decisions, and follow-ups via OpenAI."],
+                    ["Meeting assistant", "Ask questions — answers are grounded in the actual transcript."],
+                  ].map(([title, body]) => (
+                    <li key={title} className="flex items-start gap-3">
+                      <span className="mt-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+                        <CheckIcon />
+                      </span>
+                      <span>
+                        <span className="font-medium">{title}</span>
+                        <span className="text-muted-foreground"> — {body}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
-                <span className="text-sm text-muted-foreground">
-                  Sam
-                </span>
+
+              {/* mock summary panel */}
+              <div className="glass rounded-2xl p-5 shadow-2xl">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <Bot className="size-3.5 text-primary" /> Meeting assistant
+                </p>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl rounded-bl-sm bg-primary/15 px-3.5 py-2.5 text-sm">
+                    What did we decide about the database?
+                  </div>
+                  <div className="rounded-2xl rounded-tl-sm bg-muted/70 px-3.5 py-2.5 text-sm leading-6">
+                    <p>
+                      The team agreed to use Convex with a "by_code" index for
+                      presence queries. <span className="text-primary font-medium">Decision:</span>{" "}
+                      migration lands before Friday.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl rounded-tl-sm bg-muted/70 px-3.5 py-2.5 text-sm leading-6">
+                    <p>
+                      <span className="text-primary font-medium">Action items:</span>
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      <li>• Maya — prepare the testing report</li>
+                      <li>• Aarav — update the documentation</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
-              <p className="font-mono text-sm tracking-tight text-muted-foreground">
-                abc-defg-hij
-              </p>
-              <p className="text-xs text-muted-foreground/70">
-                in a call together · 12:41
-              </p>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="border-t border-border px-6 py-32 text-center">
+      {/* ---------- collaboration ---------- */}
+      <section className="border-t border-border/60 px-4 py-24 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            {...fadeUp}
+            whileInView={fadeUp.animate}
+            viewport={{ once: true, margin: "-80px" }}
+            className="text-center"
+          >
+            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-primary">
+              Collaboration
+            </p>
+            <h2 className="mt-4 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+              Meetings don't end when the call does.
+            </h2>
+          </motion.div>
+          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { icon: FileText, title: "Shared notes", body: "One live document per meeting, autosaved as you type." },
+              { icon: KanbanSquare, title: "Kanban board", body: "To Do → Done with drag & drop, assignees, and due dates." },
+              { icon: ClipboardList, title: "Meeting history", body: "Every meeting archived with its code, status, and AI artifacts." },
+              { icon: MessageSquare, title: "Persistent chat", body: "Messages are stored with the meeting, not lost when you close the tab." },
+            ].map((c, i) => (
+              <motion.div
+                key={c.title}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.5, delay: i * 0.08 }}
+                className="glass rounded-2xl p-5 transition-all hover:-translate-y-1.5 hover:shadow-xl"
+              >
+                <c.icon className="size-5 text-primary" />
+                <h3 className="mt-4 font-display text-base font-semibold">{c.title}</h3>
+                <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{c.body}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- security ---------- */}
+      <section className="border-t border-border/60 px-4 py-24 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            {...fadeUp}
+            whileInView={fadeUp.animate}
+            viewport={{ once: true, margin: "-80px" }}
+            className="grid items-center gap-10 lg:grid-cols-2"
+          >
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-primary">
+                Security
+              </p>
+              <h2 className="mt-4 font-display text-4xl font-bold tracking-tight">
+                Private by default.
+              </h2>
+              <p className="mt-5 max-w-md text-[15px] leading-7 text-muted-foreground">
+                Media flows peer-to-peer — it never touches a server. Meetings
+                are gated by a code, hosts can lock rooms and remove
+                participants, and nothing is recorded unless you press record.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { icon: ShieldCheck, t: "Protected meetings", d: "Host-only controls for lock, mute, and remove." },
+                { icon: Lock, t: "Encrypted where it counts", d: "WebRTC's DTLS-SRTP secures every media stream." },
+                { icon: Users, t: "Private rooms", d: "Rooms exist only when you share the code." },
+                { icon: Video, t: "No retention", d: "Video and audio are never stored by default." },
+              ].map((s) => (
+                <div key={s.t} className="glass flex items-start gap-3 rounded-2xl p-4">
+                  <s.icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span>
+                    <span className="block text-sm font-medium">{s.t}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                      {s.d}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ---------- final CTA ---------- */}
+      <section className="relative overflow-hidden border-t border-border/60 px-4 py-28 text-center sm:px-6">
+        <div className="aurora-blob pointer-events-none absolute left-1/2 top-1/2 size-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-indigo-600/20 to-fuchsia-500/15 blur-[130px]" />
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          {...fadeUp}
+          whileInView={fadeUp.animate}
           viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.7 }}
+          className="relative"
         >
-          <h2 className="text-4xl font-extralight tracking-tight sm:text-5xl">
-            Your next hello is a call away.
+          <h2 className="font-display text-4xl font-bold tracking-tight sm:text-6xl">
+            Start collaborating <span className="text-gradient">smarter</span>.
           </h2>
-          <p className="mx-auto mt-6 max-w-sm text-sm leading-6 text-muted-foreground">
-            No installs, no accounts for guests. Just a link and a wave.
+          <p className="mx-auto mt-6 max-w-md text-[15px] leading-7 text-muted-foreground">
+            No installs, no accounts for guests. Just a link, a wave, and AI
+            that does the note-taking.
           </p>
-          <Button asChild size="lg" className="mt-12 h-12 rounded-full px-10">
-            <Link to={primaryTarget}>
-              Open your meetings
-              <ArrowRight className="ml-2 size-4" />
-            </Link>
-          </Button>
+          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-13 rounded-full px-10 py-4 btn-glow">
+              <Link to={primaryTarget}>
+                Start a meeting <ArrowRight className="ml-2 size-4" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="h-13 rounded-full px-10 py-4"
+            >
+              <a href="#join">Join a meeting</a>
+            </Button>
+          </div>
         </motion.div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border px-6 py-10">
-        <div className="mx-auto flex max-w-3xl flex-col items-center justify-between gap-4 sm:flex-row">
-          <p className="text-sm font-medium tracking-tight">
-            hiiiiii<span className="text-muted-foreground">.</span>
-          </p>
+      {/* ---------- footer ---------- */}
+      <footer className="border-t border-border/60 px-4 py-10 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+          <Logo />
           <p className="text-xs text-muted-foreground">
-            Peer-to-peer. Private by default.
+            Peer-to-peer video · AI summaries · Private by default
           </p>
         </div>
       </footer>
     </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="size-3">
+      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

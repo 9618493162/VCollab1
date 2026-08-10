@@ -4,6 +4,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
+import { ThemeProvider } from "next-themes";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
@@ -14,13 +15,18 @@ const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Call = lazy(() => import("./pages/Call.tsx"));
+const History = lazy(() => import("./pages/History.tsx"));
+const Collab = lazy(() => import("./pages/Collab.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="space-y-3 text-center">
+        <div className="mx-auto size-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
     </div>
   );
 }
@@ -116,32 +122,55 @@ createRoot(document.getElementById("root")!).render(
         <VlyToolbar />
       </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <RequireAuth>
-                    <Dashboard />
-                  </RequireAuth>
-                }
-              />
-              {/* Public on purpose: anyone with a link can join a call — no
-                  account needed on their side. Starting meetings stays gated
-                  behind /dashboard's RequireAuth. */}
-              <Route path="/call/:code" element={<Call />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <BrowserRouter>
+            <RouteSyncer />
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route
+                  path="/auth"
+                  element={<AuthPage redirectAfterAuth="/dashboard" />}
+                />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <RequireAuth>
+                      <Dashboard />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/history"
+                  element={
+                    <RequireAuth>
+                      <History />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/collab/:code"
+                  element={
+                    <RequireAuth>
+                      <Collab />
+                    </RequireAuth>
+                  }
+                />
+                {/* Public on purpose: anyone with a link can join a call — no
+                    account needed on their side. Starting meetings stays gated
+                    behind /dashboard's RequireAuth. */}
+                <Route path="/call/:code" element={<Call />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+          <Toaster />
+        </ThemeProvider>
       </ConvexAuthProvider>
     </RootErrorBoundary>
   </StrictMode>,

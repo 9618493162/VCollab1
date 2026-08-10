@@ -1,9 +1,11 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { normalizeCode } from "./rooms";
 
 const PRESENCE_TTL_MS = 45_000; // drop presence rows that stopped heartbeating
 const SIGNAL_WINDOW_MS = 30 * 60_000; // prune old signals
+const REACTION_WINDOW_MS = 30_000; // prune old reactions
 
 async function findPresence(
   ctx: QueryCtx,
@@ -32,9 +34,23 @@ export const joinRoom = mutation({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
     if (room === null) throw new Error("This meeting doesn't exist yet.");
+    if (room.locked === true) throw new Error("This meeting is locked by the host.");
+    if (room.status === "ended") throw new Error("This meeting has ended.");
 
     const cleanName = name.trim().slice(0, 40) || "Guest";
     const now = Date.now();
+
+    // first join flips the room from scheduled -> active and stamps start time
+    if (room.status !== "active") {
+      await ctx.db.patch(room._id, { status: "active", startedAt: now });
+      const scheduled = await ctx.db
+        .query("scheduledMeetings")
+        .withIndex("by_code", (q) => q.eq("code", normalized))
+        .first();
+      if (scheduled && scheduled.status === "scheduled") {
+        await ctx.db.patch(scheduled._id, { status: "active" });
+      }
+    }
 
     // replace any stale presence row for this client
     const stale = await findPresence(ctx, normalized, clientId);
@@ -66,7 +82,12 @@ export const joinRoom = mutation({
       .collect();
     return others
       .filter((p) => p.clientId !== clientId)
-      .map((p) => ({ clientId: p.clientId, name: p.name }));
+      .map((p) => ({
+        clientId: p.clientId,
+        name: p.name,
+        sharing: p.sharing === true,
+        handRaised: p.handRaised === true,
+      }));
   },
 });
 
@@ -101,6 +122,60 @@ export const setSharing = mutation({
     if (normalized === "") return;
     const row = await findPresence(ctx, normalized, clientId);
     if (row) await ctx.db.patch(row._id, { sharing });
+  },
+});
+
+/** Raise or lower the participant's hand. */
+export const setHandRaised = mutation({
+  args: { code: v.string(), clientId: v.string(), raised: v.boolean() },
+  handler: async (ctx, { code, clientId, raised }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return;
+    const row = await findPresence(ctx, normalized, clientId);
+    if (row) await ctx.db.patch(row._id, { handRaised: raised });
+  },
+});
+
+/** Fire an emoji reaction into the room (pruned after ~30s). */
+export const sendReaction = mutation({
+  args: {
+    code: v.string(),
+    clientId: v.string(),
+    emoji: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, { code, clientId, emoji, name }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") throw new Error("That meeting code doesn't look right.");
+    const pres = await findPresence(ctx, normalized, clientId);
+    if (pres === null) throw new Error("You're not in this meeting.");
+    await ctx.db.insert("reactions", {
+      code: normalized,
+      emoji: emoji.slice(0, 8),
+      name: name.trim().slice(0, 40) || "Someone",
+      createdAt: Date.now(),
+    });
+    const cutoff = Date.now() - REACTION_WINDOW_MS;
+    const old = await ctx.db
+      .query("reactions")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .filter((q) => q.lt(q.field("createdAt"), cutoff))
+      .collect();
+    for (const r of old) await ctx.db.delete(r._id);
+  },
+});
+
+/** Recent reactions in the room, newest first. */
+export const listReactions = query({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return [];
+    return await ctx.db
+      .query("reactions")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .order("desc")
+      .take(20);
   },
 });
 
@@ -185,8 +260,100 @@ export const listParticipants = query({
         clientId: p.clientId,
         name: p.name,
         sharing: p.sharing === true,
+        handRaised: p.handRaised === true,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Host removes a participant (broadcasts a "kick" signal to their client). */
+export const kickParticipant = mutation({
+  args: { code: v.string(), target: v.string() },
+  handler: async (ctx, { code, target }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to manage participants");
+    const normalized = normalizeCode(code);
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (room === null) throw new Error("Meeting not found.");
+    if (room.createdBy !== userId)
+      throw new Error("Only the host can remove participants.");
+    const row = await findPresence(ctx, normalized, target);
+    if (row) await ctx.db.delete(row._id);
+    await ctx.db.insert("signals", {
+      code: normalized,
+      from: userId,
+      to: target,
+      kind: "kick",
+      payload: JSON.stringify({ by: userId }),
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Host asks a participant to mute (their client receives a "mute" signal). */
+export const muteParticipant = mutation({
+  args: { code: v.string(), target: v.string() },
+  handler: async (ctx, { code, target }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to manage participants");
+    const normalized = normalizeCode(code);
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (room === null) throw new Error("Meeting not found.");
+    if (room.createdBy !== userId)
+      throw new Error("Only the host can mute participants.");
+    await ctx.db.insert("signals", {
+      code: normalized,
+      from: userId,
+      to: target,
+      kind: "mute",
+      payload: JSON.stringify({ by: userId }),
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Persist a finished recording and its playback URL. */
+export const saveRecording = mutation({
+  args: {
+    code: v.string(),
+    storageId: v.id("_storage"),
+    durationMs: v.optional(v.number()),
+  },
+  handler: async (ctx, { code, storageId, durationMs }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to save recordings");
+    const normalized = normalizeCode(code);
+    if (normalized === "") throw new Error("Invalid meeting code.");
+    const url = await ctx.storage.getUrl(storageId);
+    if (url === null) throw new Error("Upload didn't stick, try again.");
+    await ctx.db.insert("recordings", {
+      code: normalized,
+      storageId,
+      url,
+      createdBy: userId,
+      createdAt: Date.now(),
+      durationMs,
+    });
+  },
+});
+
+/** Recordings for a meeting, newest first. */
+export const listRecordings = query({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return [];
+    return await ctx.db
+      .query("recordings")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .order("desc")
+      .take(10);
   },
 });
 

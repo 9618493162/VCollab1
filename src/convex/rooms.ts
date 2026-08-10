@@ -73,6 +73,33 @@ export const listMyRooms = query({
       .query("rooms")
       .withIndex("by_createdBy", (q) => q.eq("createdBy", userId))
       .order("desc")
-      .take(20);
+      .take(40);
+  },
+});
+
+/** Give a meeting a title. */
+export const renameRoom = mutation({
+  args: { code: v.string(), title: v.string() },
+  handler: async (ctx, { code, title }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to edit a meeting");
+    const normalized = normalizeCode(code);
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (room === null) throw new Error("Meeting not found.");
+    if (room.createdBy !== userId) throw new Error("Only the host can rename this meeting.");
+    await ctx.db.patch(room._id, { title: title.trim().slice(0, 80) || undefined });
+  },
+});
+
+/** Get a URL that the browser can PUT a file into (used for recordings). */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to upload recordings");
+    return await ctx.storage.generateUploadUrl();
   },
 });
