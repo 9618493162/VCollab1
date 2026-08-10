@@ -46,6 +46,7 @@ const schema = defineSchema(
       name: v.string(),
       joinedAt: v.number(),
       lastSeen: v.number(), // heartbeat, used to expire stale rows
+      sharing: v.optional(v.boolean()), // currently screen-sharing
     }).index("by_code", ["code"]),
 
     // WebRTC signaling relay: offers, answers, ICE candidates, hello/bye

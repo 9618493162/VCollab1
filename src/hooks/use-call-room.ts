@@ -68,6 +68,7 @@ export function useCallRoom(code: string, name: string) {
   const heartbeat = useMutation(api.call.heartbeat);
   const sendSignal = useMutation(api.call.sendSignal);
   const sendMessage = useMutation(api.call.sendMessage);
+  const announceSharing = useMutation(api.call.setSharing);
 
   const signals = useQuery(
     api.call.listSignals,
@@ -390,7 +391,8 @@ export function useCallRoom(code: string, name: string) {
     shareStreamRef.current = null;
     setShareStream(null);
     setSharing(false);
-  }, []);
+    void announceSharing({ code, clientId, sharing: false });
+  }, [clientId, code, announceSharing]);
 
   const toggleShare = useCallback(async () => {
     if (sharing) {
@@ -410,10 +412,11 @@ export function useCallRoom(code: string, name: string) {
       }
       setShareStream(screenStream);
       setSharing(true);
+      void announceSharing({ code, clientId, sharing: true });
     } catch {
       // user cancelled the picker
     }
-  }, [sharing, stopSharing]);
+  }, [sharing, stopSharing, clientId, code, announceSharing]);
 
   const postMessage = useCallback(
     async (text: string) => {

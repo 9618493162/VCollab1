@@ -46,6 +46,7 @@ export const joinRoom = mutation({
       name: cleanName,
       joinedAt: now,
       lastSeen: now,
+      sharing: false,
     });
 
     // announce ourselves so existing participants open a connection to us
@@ -85,6 +86,21 @@ export const leaveRoom = mutation({
       payload: JSON.stringify({ clientId }),
       createdAt: Date.now(),
     });
+  },
+});
+
+/** Announce whether the current user is screen-sharing. */
+export const setSharing = mutation({
+  args: {
+    code: v.string(),
+    clientId: v.string(),
+    sharing: v.boolean(),
+  },
+  handler: async (ctx, { code, clientId, sharing }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return;
+    const row = await findPresence(ctx, normalized, clientId);
+    if (row) await ctx.db.patch(row._id, { sharing });
   },
 });
 
@@ -165,7 +181,11 @@ export const listParticipants = query({
       .collect();
     return rows
       .filter((p) => p.lastSeen >= cutoff)
-      .map((p) => ({ clientId: p.clientId, name: p.name }))
+      .map((p) => ({
+        clientId: p.clientId,
+        name: p.name,
+        sharing: p.sharing === true,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });

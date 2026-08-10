@@ -133,14 +133,10 @@ createRoot(document.getElementById("root")!).render(
                   </RequireAuth>
                 }
               />
-              <Route
-                path="/call/:code"
-                element={
-                  <RequireAuth>
-                    <Call />
-                  </RequireAuth>
-                }
-              />
+              {/* Public on purpose: anyone with a link can join a call — no
+                  account needed on their side. Starting meetings stays gated
+                  behind /dashboard's RequireAuth. */}
+              <Route path="/call/:code" element={<Call />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

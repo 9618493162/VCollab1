@@ -72,8 +72,8 @@ function VideoSurface({
 function Avatar({ name }: { name: string }) {
   const initial = (name.trim()[0] ?? "?").toUpperCase();
   return (
-    <div className="flex h-full w-full items-center justify-center bg-muted">
-      <span className="text-4xl font-extralight text-muted-foreground">
+    <div className="flex h-full w-full items-center justify-center bg-neutral-800">
+      <span className="text-4xl font-extralight text-neutral-400">
         {initial}
       </span>
     </div>
@@ -84,7 +84,7 @@ export default function Call() {
   const { code: rawCode } = useParams();
   const code = extractCode(rawCode ?? "");
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAuthenticated } = useAuth();
 
   const [displayName, setDisplayName] = useState(
     user?.name?.split(" ")[0] ?? "You",
@@ -117,7 +117,7 @@ export default function Call() {
 
   const handleLeave = async () => {
     await call.leave();
-    navigate("/dashboard");
+    navigate(isAuthenticated ? "/dashboard" : "/");
   };
 
   const handleCopy = async () => {
@@ -136,7 +136,8 @@ export default function Call() {
     setChatDraft("");
   };
 
-  const participantCount = (call.participants?.length ?? 0) + (entered ? 1 : 0);
+  // participants includes our own presence row once joined
+  const participantCount = call.participants?.length ?? (entered ? 1 : 0);
   const isSharing = call.sharing;
   const selfStream = isSharing ? call.shareStream : call.localStream;
 
@@ -240,22 +241,54 @@ export default function Call() {
                 </div>
 
                 {/* remote tiles */}
-                {Object.entries(call.remoteStreams).map(([peerId, stream]) => (
-                  <div
-                    key={peerId}
-                    className="relative aspect-video w-full overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-white/10"
-                  >
-                    <VideoSurface stream={stream} />
-                    <div className="absolute bottom-2.5 left-3 rounded-md bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
-                      {call.names[peerId] ?? "Guest"}
+                {Object.entries(call.remoteStreams).map(([peerId, stream]) => {
+                  const presenting = call.participants?.find(
+                    (p) => p.clientId === peerId,
+                  )?.sharing;
+                  return (
+                    <div
+                      key={peerId}
+                      className="relative aspect-video w-full overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-white/10"
+                    >
+                      <VideoSurface stream={stream} />
+                      <div className="absolute bottom-2.5 left-3 flex items-center gap-2">
+                        <span className="rounded-md bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
+                          {call.names[peerId] ?? "Guest"}
+                        </span>
+                        {presenting && (
+                          <span className="flex items-center gap-1 rounded-md bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
+                            <MonitorUp className="size-3" />
+                            presenting
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+
+                {/* peers present in the room but not connected yet */}
+                {call.participants
+                  ?.filter(
+                    (p) =>
+                      p.clientId !== call.clientId &&
+                      !(p.clientId in call.remoteStreams),
+                  )
+                  .map((p) => (
+                    <div
+                      key={p.clientId}
+                      className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-white/10"
+                    >
+                      <Avatar name={p.name} />
+                      <div className="absolute bottom-2.5 left-3 rounded-md bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
+                        {p.name} · joining…
+                      </div>
+                    </div>
+                  ))}
 
                 {!isMissing &&
                   Object.keys(call.remoteStreams).length === 0 &&
                   call.participants &&
-                  call.participants.length === 0 && (
+                  call.participants.length === 1 && (
                     <div className="col-span-full flex h-full min-h-[200px] flex-col items-center justify-center text-center">
                       <p className="text-lg font-extralight text-neutral-300">
                         You're the first one here.
@@ -440,14 +473,23 @@ export default function Call() {
               >
                 hiiiiii<span className="text-neutral-500">.</span>
               </button>
-              <button
-                type="button"
-                onClick={() => void signOut().then(() => navigate("/"))}
-                className="flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-white"
-              >
-                <LogOut className="size-3.5" />
-                Sign out
-              </button>
+              {isAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={() => void signOut().then(() => navigate("/"))}
+                  className="flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-white"
+                >
+                  <LogOut className="size-3.5" />
+                  Sign out
+                </button>
+              ) : (
+                <Link
+                  to={`/auth?returnTo=/call/${code}`}
+                  className="flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  Sign in to keep meetings
+                </Link>
+              )}
             </div>
 
             <p className="mt-12 text-[11px] font-medium uppercase tracking-[0.3em] text-neutral-500">
