@@ -3,13 +3,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCallRoom, type PeerQuality } from "@/hooks/use-call-room";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Captions,
   Check,
   Copy,
   Hand,
+  Languages,
   LayoutGrid,
   Lock,
   LockOpen,
@@ -173,6 +174,54 @@ export default function Call() {
       toast.warning(call.recordingError);
     }
   }, [call.recordingError]);
+
+  // ---- live caption translation (server-side via ai.translateText) ----
+  const translateText = useAction(api.ai.translateText);
+  const [translateTo, setTranslateTo] = useState<string | null>(null);
+  const [translated, setTranslated] = useState<{ line: string; text: string } | null>(null);
+  const [translationNotice, setTranslationNotice] = useState<string | null>(null);
+  const translatedIndexRef = useRef(-1);
+  const translateTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setTranslated(null);
+    setTranslationNotice(null);
+    translatedIndexRef.current = -1;
+  }, [translateTo]);
+
+  useEffect(() => {
+    const lines = call.captions;
+    if (!translateTo || lines.length === 0) return;
+    const lastIndex = lines.length - 1;
+    if (lastIndex <= translatedIndexRef.current) return;
+    const text = lines[lastIndex];
+    if (!text.trim()) return;
+
+    if (translateTimerRef.current) window.clearTimeout(translateTimerRef.current);
+    translateTimerRef.current = window.setTimeout(() => {
+      translatedIndexRef.current = lastIndex;
+      void translateText({ text, target: translateTo })
+        .then((res) => {
+          if (translatedIndexRef.current === lastIndex) {
+            setTranslated({ line: text, text: res });
+          }
+        })
+        .catch((error) => {
+          const msg = error instanceof Error ? error.message : "";
+          if (/isn't configured|not configured/i.test(msg)) {
+            setTranslationNotice(
+              "Live translation needs OPENAI_API_KEY in the project Keys tab.",
+            );
+          } else if (msg) {
+            setTranslationNotice("Live translation isn't available right now.");
+          }
+        });
+    }, 700);
+
+    return () => {
+      if (translateTimerRef.current) window.clearTimeout(translateTimerRef.current);
+    };
+  }, [call.captions, translateTo, translateText]);
 
   const handleJoin = () => {
     if (!displayName.trim()) {
@@ -516,6 +565,28 @@ export default function Call() {
             {/* captions */}
             {call.captionsEnabled && (
               <div className="absolute inset-x-0 bottom-3 z-20 mx-auto flex max-w-2xl flex-col items-center gap-1 px-4">
+                <div className="mb-1 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white/80 backdrop-blur-sm">
+                  <Languages className="size-3.5" />
+                  <span className="opacity-70">Translate</span>
+                  <select
+                    value={translateTo ?? ""}
+                    onChange={(e) => setTranslateTo(e.target.value || null)}
+                    aria-label="Translate captions to"
+                    className="cursor-pointer rounded-full border border-white/20 bg-black/40 px-2 py-0.5 text-[11px] text-white outline-none transition-colors hover:border-white/40 [&>option]:bg-background [&>option]:text-foreground"
+                  >
+                    <option value="">Off</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Telugu">Telugu</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="Bengali">Bengali</option>
+                    <option value="Tamil">Tamil</option>
+                    <option value="Kannada">Kannada</option>
+                    <option value="Japanese">Japanese</option>
+                  </select>
+                </div>
                 {call.captions.slice(-3).map((line, i) => (
                   <span
                     key={i}
@@ -524,9 +595,19 @@ export default function Call() {
                     {line}
                   </span>
                 ))}
+                {translated && translated.line === call.captions[call.captions.length - 1] && (
+                  <span className="rounded-lg border border-primary/50 bg-primary/25 px-3 py-1 text-sm text-white backdrop-blur-sm">
+                    {translated.text}
+                  </span>
+                )}
                 {call.interimCaption && (
                   <span className="rounded-lg bg-black/40 px-3 py-1 text-sm text-white/70 backdrop-blur-sm">
                     {call.interimCaption}
+                  </span>
+                )}
+                {translationNotice && (
+                  <span className="rounded-lg bg-amber-500/20 px-3 py-1 text-[11px] text-amber-200 backdrop-blur-sm">
+                    {translationNotice}
                   </span>
                 )}
               </div>
