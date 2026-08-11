@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { ManageAttendeesDialog } from "@/components/ManageAttendeesDialog";
+import { MeetingChat } from "@/components/MeetingChat";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
@@ -372,7 +373,7 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="summary">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="summary">
               <Sparkles className="mr-1.5 size-3.5" /> Summary
             </TabsTrigger>
@@ -384,6 +385,9 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
             </TabsTrigger>
             <TabsTrigger value="recordings">
               <MessageSquareText className="mr-1.5 size-3.5" /> Recordings
+            </TabsTrigger>
+            <TabsTrigger value="chat">
+              <MessageSquareText className="mr-1.5 size-3.5" /> Chat
             </TabsTrigger>
           </TabsList>
 
@@ -446,6 +450,10 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
                 transcribed automatically.
               </p>
             )}
+          </TabsContent>
+
+          <TabsContent value="chat">
+            <MeetingChat code={code} readOnly className="max-h-96" />
           </TabsContent>
 
           <TabsContent value="recordings" className="max-h-96 overflow-y-auto">

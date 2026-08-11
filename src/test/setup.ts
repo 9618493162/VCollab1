@@ -7,3 +7,7 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+
+// jsdom doesn't implement scrollIntoView, but components that auto-scroll
+// (e.g. the meeting chat) call it in effects. Stub it so tests don't throw.
+Element.prototype.scrollIntoView = () => {};

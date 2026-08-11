@@ -2,6 +2,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { AppHeader } from "@/components/AppHeader";
 import { FileSharingPanel } from "@/components/FileSharingPanel";
+import { MeetingChat } from "@/components/MeetingChat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -79,7 +80,7 @@ export default function Collab() {
   const { code: rawCode } = useParams();
   const code = extractCode(rawCode ?? "");
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"notes" | "board" | "ai" | "files">("notes");
+  const [tab, setTab] = useState<"notes" | "chat" | "board" | "ai" | "files">("notes");
 
   if (!code) {
     return (
@@ -112,6 +113,7 @@ export default function Collab() {
             {(
               [
                 { id: "notes", label: "Notes", icon: FileText },
+                { id: "chat", label: "Chat", icon: MessageSquareText },
                 { id: "board", label: "Board", icon: ClipboardList },
                 { id: "ai", label: "AI", icon: Sparkles },
                 { id: "files", label: "Files", icon: Paperclip },
@@ -137,6 +139,20 @@ export default function Collab() {
 
         <div className="mt-8">
           {tab === "notes" && <NotesTab code={code} />}
+          {tab === "chat" && (
+            <div className="glass rounded-2xl p-6 sm:p-8">
+              <div className="flex items-center justify-between">
+                <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+                  <MessageSquareText className="size-4 text-primary" /> Meeting chat
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Shared with everyone in the meeting
+                </p>
+              </div>
+              <div className="mt-2 h-px bg-border/70" />
+              <MeetingChat code={code} className="mt-4 h-[58vh]" />
+            </div>
+          )}
           {tab === "board" && <BoardTab code={code} />}
           {tab === "ai" && <AiTab code={code} />}
           {tab === "files" && <FileSharingPanel code={code} />}
