@@ -5,32 +5,24 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import React, { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting
-const Landing = lazy(() => import("./pages/Landing.tsx"));
-const AuthPage = lazy(() => import("./pages/Auth.tsx"));
-const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
-const Call = lazy(() => import("./pages/Call.tsx"));
-const History = lazy(() => import("./pages/History.tsx"));
-const SettingsPage = lazy(() => import("./pages/Settings.tsx"));
-const Collab = lazy(() => import("./pages/Collab.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
-
-// Simple loading fallback for route transitions
-function RouteLoading() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="space-y-3 text-center">
-        <div className="mx-auto size-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    </div>
-  );
-}
+// Routes are static imports: in the sandboxed preview, a rotated dev session
+// makes per-route dynamic-import fetches fail with "Failed to fetch dynamically
+// imported module". Static imports bundle everything up front, so navigation
+// never depends on a fresh module URL. Production code-splitting is preserved
+// by the manualChunks config in vite.config.ts.
+import Landing from "./pages/Landing";
+import AuthPage from "./pages/Auth";
+import Dashboard from "./pages/Dashboard";
+import Call from "./pages/Call";
+import History from "./pages/History";
+import SettingsPage from "./pages/Settings";
+import Collab from "./pages/Collab";
+import NotFound from "./pages/NotFound";
 
 /** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
  *  crashing the whole app (e.g. hook errors in WebContainer environment). */
@@ -131,52 +123,50 @@ createRoot(document.getElementById("root")!).render(
         >
           <BrowserRouter>
             <RouteSyncer />
-            <Suspense fallback={<RouteLoading />}>
-              <Routes>
-                <Route path="/" element={<Landing />} />
-                <Route
-                  path="/auth"
-                  element={<AuthPage redirectAfterAuth="/dashboard" />}
-                />
-                <Route
-                  path="/dashboard"
-                  element={
-                    <RequireAuth>
-                      <Dashboard />
-                    </RequireAuth>
-                  }
-                />
-                <Route
-                  path="/history"
-                  element={
-                    <RequireAuth>
-                      <History />
-                    </RequireAuth>
-                  }
-                />
-                <Route
-                  path="/settings"
-                  element={
-                    <RequireAuth>
-                      <SettingsPage />
-                    </RequireAuth>
-                  }
-                />
-                <Route
-                  path="/collab/:code"
-                  element={
-                    <RequireAuth>
-                      <Collab />
-                    </RequireAuth>
-                  }
-                />
-                {/* Public on purpose: anyone with a link can join a call — no
-                    account needed on their side. Starting meetings stays gated
-                    behind /dashboard's RequireAuth. */}
-                <Route path="/call/:code" element={<Call />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route
+                path="/auth"
+                element={<AuthPage redirectAfterAuth="/dashboard" />}
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <RequireAuth>
+                    <Dashboard />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/history"
+                element={
+                  <RequireAuth>
+                    <History />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <RequireAuth>
+                    <SettingsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/collab/:code"
+                element={
+                  <RequireAuth>
+                    <Collab />
+                  </RequireAuth>
+                }
+              />
+              {/* Public on purpose: anyone with a link can join a call — no
+                  account needed on their side. Starting meetings stays gated
+                  behind /dashboard's RequireAuth. */}
+              <Route path="/call/:code" element={<Call />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
           </BrowserRouter>
           <Toaster />
         </ThemeProvider>
