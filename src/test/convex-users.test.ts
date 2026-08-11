@@ -43,3 +43,46 @@ describe("users.searchUsers", () => {
     expect(await me.query(api.users.searchUsers, { query: "zzz" })).toEqual([]);
   });
 });
+
+describe("users.getUsersByEmails", () => {
+  it("resolves known emails to users and skips unknowns + guests", async () => {
+    const t = makeTestClient();
+    const meId = await insertUser(t, "me@example.com", "Myself");
+    const aliceId = await insertUser(t, "alice@example.com", "Alice Lee");
+    await insertUser(t, "bob@corp.io", "Bobby Tables");
+    await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Ghost User",
+        email: "ghost@example.com",
+        isAnonymous: true,
+      }),
+    );
+
+    const me = t.withIdentity({ subject: meId });
+
+    const result = await me.query(api.users.getUsersByEmails, {
+      emails: ["ALICE@example.com", "nobody@example.com", "ghost@example.com"],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      _id: aliceId,
+      name: "Alice Lee",
+      email: "alice@example.com",
+    });
+
+    // Unknown addresses are dropped, empty input returns nothing.
+    expect(
+      await me.query(api.users.getUsersByEmails, {
+        emails: ["zzz@nowhere.com"],
+      }),
+    ).toEqual([]);
+    expect(await me.query(api.users.getUsersByEmails, { emails: [] })).toEqual([]);
+
+    // Signed-out callers get nothing.
+    expect(
+      await t.query(api.users.getUsersByEmails, {
+        emails: ["alice@example.com"],
+      }),
+    ).toEqual([]);
+  });
+});

@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useMutation, useQuery } from "convex/react";
 import { Loader2, Mail, Send } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 /** The minimal scheduled-meeting shape the dialog needs from its parent. */
@@ -39,6 +39,12 @@ export function ManageAttendeesDialog({
   const [selected, setSelected] = useState<{ email: string; name?: string }[]>([]);
   const [adding, setAdding] = useState(false);
   const [resending, setResending] = useState(false);
+
+  // The dialog stays mounted between opens, so clear any picks from a
+  // previous session whenever it opens (or switches to another meeting).
+  useEffect(() => {
+    if (open) setSelected([]);
+  }, [open, meeting?.code]);
 
   const existingEmails = useMemo(
     () => (meeting?.attendees ?? []).map((e) => e.toLowerCase()),
