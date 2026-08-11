@@ -157,3 +157,93 @@ describe("RSVP flow", () => {
     expect(after[0].rsvps![0].status).toBe("maybe");
   });
 });
+
+describe("managing attendees on a scheduled meeting", () => {
+  it("lets the host add people, deduping against existing attendees and the host", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const newbieId = await insertUser(t, "bob@example.com", "Bob");
+
+    const host = t.withIdentity({ subject: hostId });
+    const code = await host.mutation(api.meetings.scheduleMeeting, {
+      title: "Planning",
+      startTime: Date.now() + 60 * 60_000,
+      durationMinutes: 30,
+      attendees: ["alice@example.com"],
+    });
+
+    const added = await host.mutation(api.meetings.addAttendees, {
+      code,
+      emails: ["BOB@example.com", "alice@example.com", "host@example.com", "nope"],
+    });
+    expect(added).toBe(1);
+
+    const upcoming = await host.query(api.meetings.listUpcoming);
+    expect(upcoming[0].attendees).toEqual([
+      "alice@example.com",
+      "bob@example.com",
+    ]);
+
+    // The newly added registered user is notified and sees the invite.
+    const newbie = t.withIdentity({ subject: newbieId });
+    const notifications = await newbie.query(api.notifications.listNotifications);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].type).toBe("invite");
+    expect(notifications[0].title).toContain("Planning");
+
+    const invited = await newbie.query(api.meetings.listInvited);
+    expect(invited).toHaveLength(1);
+    expect(invited[0].code).toBe(code);
+  });
+
+  it("rejects non-hosts and meetings that are no longer scheduled", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const inviteeId = await insertUser(t, "invitee@example.com", "Invitee");
+
+    const host = t.withIdentity({ subject: hostId });
+    const invitee = t.withIdentity({ subject: inviteeId });
+
+    const code = await host.mutation(api.meetings.scheduleMeeting, {
+      title: "Review",
+      startTime: Date.now() + 60 * 60_000,
+      durationMinutes: 30,
+      attendees: ["invitee@example.com"],
+    });
+
+    await expect(
+      invitee.mutation(api.meetings.addAttendees, {
+        code,
+        emails: ["carol@example.com"],
+      }),
+    ).rejects.toThrow("Only the host can add attendees.");
+    await expect(
+      invitee.mutation(api.meetings.resendInvites, { code }),
+    ).rejects.toThrow("Only the host can re-send invites.");
+
+    await host.mutation(api.meetings.cancelScheduled, { code });
+    await expect(
+      host.mutation(api.meetings.addAttendees, {
+        code,
+        emails: ["carol@example.com"],
+      }),
+    ).rejects.toThrow("no longer accepting new attendees");
+  });
+
+  it("re-sends invite emails to every current attendee", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+
+    const host = t.withIdentity({ subject: hostId });
+    const code = await host.mutation(api.meetings.scheduleMeeting, {
+      title: "Standup",
+      startTime: Date.now() + 60 * 60_000,
+      durationMinutes: 15,
+      attendees: ["alice@example.com", "bob@example.com"],
+    });
+
+    // Best-effort: returns the count of people emailed and never throws.
+    const count = await host.mutation(api.meetings.resendInvites, { code });
+    expect(count).toBe(2);
+  });
+});

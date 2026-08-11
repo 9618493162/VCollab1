@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { ManageAttendeesDialog } from "@/components/ManageAttendeesDialog";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
@@ -64,6 +65,7 @@ export default function History() {
   const [cancelling, setCancelling] = useState(false);
 
   type Scheduled = NonNullable<typeof scheduled>[number];
+  const [manageTarget, setManageTarget] = useState<Scheduled | null>(null);
 
   const scheduledByCode = useMemo(() => {
     const map = new Map<string, Scheduled>();
@@ -255,14 +257,24 @@ export default function History() {
                         <ClipboardList className="mr-1.5 size-3.5" /> Notes & board
                       </Button>
                       {isHost && status === "scheduled" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setCancelTarget({ code: room.code, title })}
-                        >
-                          <CalendarX className="mr-1.5 size-3.5" /> Cancel
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full"
+                            onClick={() => meta && setManageTarget(meta)}
+                          >
+                            <Users className="mr-1.5 size-3.5" /> Attendees
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setCancelTarget({ code: room.code, title })}
+                          >
+                            <CalendarX className="mr-1.5 size-3.5" /> Cancel
+                          </Button>
+                        </>
                       )}
                       <Button
                         size="icon"
@@ -283,6 +295,12 @@ export default function History() {
       </main>
 
       {details && <MeetingDetails code={details} onClose={() => setDetails(null)} />}
+
+      <ManageAttendeesDialog
+        open={manageTarget !== null}
+        onOpenChange={(open) => !open && setManageTarget(null)}
+        meeting={manageTarget}
+      />
 
       <AlertDialog
         open={cancelTarget !== null}

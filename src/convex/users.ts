@@ -66,3 +66,42 @@ export const searchUsers = query({
       }));
   },
 });
+
+/**
+ * Resolve a list of invitee emails to registered users (for showing names in
+ * attendee lists). Unknown addresses are skipped. Requires auth — callers
+ * only pass emails they already have access to (e.g. from meetings they
+ * host).
+ */
+export const getUsersByEmails = query({
+  args: { emails: v.array(v.string()) },
+  handler: async (ctx, { emails }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const wanted = emails.map((e) => e.trim().toLowerCase()).filter(Boolean);
+    if (wanted.length === 0) return [];
+
+    const rows = await ctx.db.query("users").collect();
+    const byEmail = new Map(
+      rows
+        .filter((u) => u.isAnonymous !== true)
+        .map((u) => [u.email?.toLowerCase(), u]),
+    );
+
+    return wanted
+      .slice(0, 50)
+      .flatMap((email) => {
+        const u = byEmail.get(email);
+        return u
+          ? [
+              {
+                _id: u._id,
+                name: u.name ?? "User",
+                email: u.email!.toLowerCase(),
+                image: u.image,
+              },
+            ]
+          : [];
+      });
+  },
+});

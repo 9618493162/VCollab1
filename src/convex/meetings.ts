@@ -275,6 +275,116 @@ export const cancelScheduled = mutation({
 });
 
 /**
+ * Host adds attendees to an already-scheduled meeting. Newly added people get
+ * an in-app invite and an email invite; existing attendees are left alone
+ * (use resendInvites to re-email everyone). Returns the number added.
+ */
+export const addAttendees = mutation({
+  args: {
+    code: v.string(),
+    emails: v.array(v.string()),
+  },
+  handler: async (ctx, { code, emails }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to manage meetings");
+    const normalized = normalizeCode(code);
+    const scheduled = await ctx.db
+      .query("scheduledMeetings")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (scheduled === null) throw new Error("Scheduled meeting not found.");
+    if (scheduled.hostId !== userId)
+      throw new Error("Only the host can add attendees.");
+    if (scheduled.status !== "scheduled")
+      throw new Error("This meeting is no longer accepting new attendees.");
+
+    const me = await ctx.db.get(userId);
+    const hostEmail = me?.email?.toLowerCase();
+    const existing = scheduled.attendees ?? [];
+    const fresh = normalizeEmails(emails).filter(
+      (e) => e !== hostEmail && !existing.includes(e),
+    );
+    if (fresh.length === 0) return 0;
+
+    await ctx.db.patch(scheduled._id, {
+      attendees: [...existing, ...fresh].slice(0, 20),
+    });
+
+    // In-app invites for registered users who are newly added (best-effort).
+    const when = new Date(scheduled.startTime).toLocaleString();
+    for (const u of await usersByEmails(ctx, fresh)) {
+      const wantsInvites = await ctx.runQuery(internal.settings.shouldNotify, {
+        userId: u._id,
+        type: "invite",
+      });
+      if (!wantsInvites) continue;
+      await createNotification(ctx, {
+        userId: u._id,
+        type: "invite",
+        title: `You're invited: ${scheduled.title}`,
+        body: `${when} · code ${normalized}`,
+        link: `/call/${normalized}`,
+      });
+    }
+
+    // Email invite to the newly added people only (best-effort).
+    try {
+      await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
+        code: normalized,
+        kind: "invite",
+        title: scheduled.title,
+        startTime: scheduled.startTime,
+        durationMinutes: scheduled.durationMinutes,
+        description: scheduled.description,
+        attendees: fresh,
+      });
+    } catch {
+      // email is best-effort
+    }
+
+    return fresh.length;
+  },
+});
+
+/**
+ * Host re-sends the invite email to every current attendee (handy when
+ * someone lost the link or the details changed). Returns the number emailed.
+ */
+export const resendInvites = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to manage meetings");
+    const normalized = normalizeCode(code);
+    const scheduled = await ctx.db
+      .query("scheduledMeetings")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (scheduled === null) throw new Error("Scheduled meeting not found.");
+    if (scheduled.hostId !== userId)
+      throw new Error("Only the host can re-send invites.");
+    if (scheduled.status !== "scheduled")
+      throw new Error("This meeting is no longer accepting invites.");
+
+    const attendees = scheduled.attendees ?? [];
+    try {
+      await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
+        code: normalized,
+        kind: "invite",
+        title: scheduled.title,
+        startTime: scheduled.startTime,
+        durationMinutes: scheduled.durationMinutes,
+        description: scheduled.description,
+        attendees,
+      });
+    } catch {
+      // email is best-effort
+    }
+    return attendees.length;
+  },
+});
+
+/**
  * Record an invitee's response (yes / no / maybe) for a scheduled meeting.
  * Only invited attendees can respond. The host is notified when someone
  * says yes (best-effort, respects their notification preferences).
