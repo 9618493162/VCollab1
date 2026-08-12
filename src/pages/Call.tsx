@@ -26,6 +26,7 @@ import {
   Minimize2,
   MonitorUp,
   MoreVertical,
+  PenLine,
   PhoneOff,
   PictureInPicture2,
   Radio,
@@ -49,6 +50,7 @@ import { PollsPanel } from "@/components/PollsPanel";
 import { QAPanel } from "@/components/QAPanel";
 import { AgendaPanel } from "@/components/AgendaPanel";
 import { BreakoutsPanel } from "@/components/BreakoutsPanel";
+import { WhiteboardOverlay } from "@/components/WhiteboardOverlay";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { cn } from "@/lib/utils";
@@ -136,7 +138,7 @@ export default function Call() {
   );
   const [entered, setEntered] = useState(false);
   const [panel, setPanel] = useState<
-    "none" | "chat" | "people" | "polls" | "qa" | "agenda" | "breakouts"
+    "none" | "chat" | "people" | "polls" | "qa" | "agenda" | "breakouts" | "whiteboard"
   >("none");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -473,6 +475,11 @@ export default function Call() {
                     onClick={() => setPanel((p) => (p === "breakouts" ? "none" : "breakouts"))}
                   >
                     <Users className="mr-2 size-4" /> Breakout rooms
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "whiteboard" ? "none" : "whiteboard"))}
+                  >
+                    <PenLine className="mr-2 size-4" /> Whiteboard
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShowShortcuts(true)}>
@@ -911,6 +918,15 @@ export default function Call() {
           )}
           {panel === "breakouts" && (
             <BreakoutsPanel
+              code={code}
+              isHost={isHost === true}
+              clientId={call.clientId}
+              name={call.participants?.find((p) => p.clientId === call.clientId)?.name ?? displayName}
+              onClose={() => setPanel("none")}
+            />
+          )}
+          {panel === "whiteboard" && (
+            <WhiteboardOverlay
               code={code}
               isHost={isHost === true}
               clientId={call.clientId}

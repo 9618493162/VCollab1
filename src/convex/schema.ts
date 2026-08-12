@@ -378,6 +378,25 @@ const schema = defineSchema(
       .index("by_code", ["code"])
       .index("by_room", ["roomId"]),
 
+    // --- Shared in-call whiteboard (Phase 56) ---
+
+    // one stroke per row, rendered live for everyone in the meeting
+    whiteboardStrokes: defineTable({
+      code: v.string(),
+      clientId: v.string(), // author's call client id
+      name: v.string(),
+      color: v.string(), // hex color
+      width: v.number(), // stroke width in screen px
+      highlighter: v.boolean(), // translucent mode
+      points: v.array(
+        v.object({
+          x: v.number(), // 0..1000 logical space
+          y: v.number(), // 0..600 logical space
+        }),
+      ),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
+
     // messages inside a breakout room (host can broadcast to any room)
     breakoutMessages: defineTable({
       roomId: v.id("breakoutRooms"),
