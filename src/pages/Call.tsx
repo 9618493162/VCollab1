@@ -1792,7 +1792,7 @@ function PeoplePanel({
                 {isHost && !self && !coHostIds.has(p.clientId) && (
                   <button
                     type="button"
-                    onClick={() => onMakeCoHost(p.clientId, true)}
+                    onClick={() => onMakeCoHost(p.clientId)}
                     title="Make co-host"
                     aria-label="Make co-host"
                     className="flex size-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"

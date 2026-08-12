@@ -82,8 +82,7 @@ function NotesTab({ code }: { code: string }) {
     hydratedRef.current = true;
     setTitle(note?.title ?? "");
     setContent(note?.content ?? "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [note]);
+  }, [note]); // hydrate once when the note arrives
 
   const schedule = (fn: () => void) => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);

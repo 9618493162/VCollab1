@@ -398,6 +398,8 @@ export function useCallRoom(code: string, name: string) {
     if (!joined || !waiting) return;
     const me = (participants ?? []).find((p) => p.clientId === clientId);
     if (!me) return;
+    // Server data (participants) revealed we're admitted — leave the waiting room.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWaiting(false);
     void sendSignal({
       code,
@@ -536,6 +538,8 @@ export function useCallRoom(code: string, name: string) {
     if (!captionsEnabled || !joined) return;
     const Ctor = getSpeechRecognition();
     if (!Ctor) {
+      // Browser support check happens once per toggle; sync state is intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCaptionError("Live captions aren't supported in this browser (try Chrome or Edge).");
       setCaptionsEnabled(false);
       return;

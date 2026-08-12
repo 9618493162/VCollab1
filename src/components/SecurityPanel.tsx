@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { Lock, LockOpen, ShieldCheck, Users, X } from "lucide-react";
+import { ShieldCheck, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
