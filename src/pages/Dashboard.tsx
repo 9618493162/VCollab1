@@ -43,6 +43,7 @@ import {
   Loader2,
   Play,
   Plus,
+  Repeat,
   Sparkles,
   Users,
   Video,
@@ -70,6 +71,22 @@ function greeting() {
   return ["Good evening", "Wrap up strong — or schedule tomorrow's plan."];
 }
 
+/** Human label for a stored recurrence rule. */
+function repeatLabel(r?: { frequency?: string; interval?: number } | null): string {
+  if (!r) return "";
+  const n = Math.max(1, r.interval ?? 1);
+  switch (r.frequency) {
+    case "daily":
+      return n === 1 ? "Daily" : `Every ${n} days`;
+    case "weekly":
+      return n === 1 ? "Weekly" : `Every ${n} weeks`;
+    case "monthly":
+      return n === 1 ? "Monthly" : `Every ${n} months`;
+    default:
+      return "Repeats";
+  }
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -89,6 +106,7 @@ export default function Dashboard() {
   const [cancelTarget, setCancelTarget] = useState<{
     code: string;
     title: string;
+    isSeries: boolean;
   } | null>(null);
   const [agendaTarget, setAgendaTarget] = useState<{
     code: string;
@@ -170,12 +188,16 @@ export default function Dashboard() {
     }
   };
 
-  const handleCancel = async () => {
+  const handleCancel = async (scope: "this" | "series") => {
     if (!cancelTarget) return;
     setCancelling(true);
     try {
-      await cancelScheduled({ code: cancelTarget.code });
-      toast.success("Meeting cancelled — attendees were notified.");
+      await cancelScheduled({ code: cancelTarget.code, scope });
+      toast.success(
+        scope === "series"
+          ? "Series cancelled — every occurrence was removed."
+          : "Meeting cancelled — attendees were notified.",
+      );
       setCancelTarget(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't cancel.");
@@ -345,6 +367,15 @@ export default function Dashboard() {
                               >
                                 {m.code}
                               </Badge>
+                              {m.recurrence && (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-primary/30 text-primary"
+                                >
+                                  <Repeat className="mr-1 size-3" />
+                                  {repeatLabel(m.recurrence)}
+                                </Badge>
+                              )}
                               {!isHost && (
                                 <Badge
                                   variant="outline"
@@ -484,7 +515,11 @@ export default function Dashboard() {
                                 size="sm"
                                 className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 onClick={() =>
-                                  setCancelTarget({ code: m.code, title: m.title })
+                                  setCancelTarget({
+                                    code: m.code,
+                                    title: m.title,
+                                    isSeries: m.recurrence !== undefined,
+                                  })
                                 }
                               >
                                 <CalendarX className="mr-1.5 size-3.5" /> Cancel
@@ -669,14 +704,31 @@ export default function Dashboard() {
               Cancel “{cancelTarget?.title ?? ""}”?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Attendees will get an email + in-app notification that the meeting
-              is no longer happening. The meeting code will stop working.
+              {cancelTarget?.isSeries ? (
+                <>This meeting is part of a recurring series. Choose what to
+                  cancel — one occurrence, or the whole series.</>
+              ) : (
+                <>Attendees will get an email + in-app notification that the
+                  meeting is no longer happening. The meeting code will stop
+                  working.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-full">Keep it</AlertDialogCancel>
+            {cancelTarget?.isSeries && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={cancelling}
+                onClick={() => void handleCancel("this")}
+                className="rounded-full"
+              >
+                This meeting only
+              </Button>
+            )}
             <AlertDialogAction
-              onClick={() => void handleCancel()}
+              onClick={() => void handleCancel("series")}
               disabled={cancelling}
               className="rounded-full bg-destructive text-white hover:bg-destructive/90"
             >
@@ -685,7 +737,7 @@ export default function Dashboard() {
               ) : (
                 <CalendarX className="mr-2 size-4" />
               )}
-              Cancel meeting
+              {cancelTarget?.isSeries ? "Cancel series" : "Cancel meeting"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -733,6 +785,14 @@ function ScheduleDialog({
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState("30");
   const [attendees, setAttendees] = useState<{ email: string; name?: string }[]>([]);
+  const [repeat, setRepeat] = useState<"none" | "daily" | "weekly" | "monthly">(
+    "none",
+  );
+  const [repeatInterval, setRepeatInterval] = useState("1");
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
+  const [repeatEnd, setRepeatEnd] = useState<"never" | "after" | "on">("never");
+  const [repeatCount, setRepeatCount] = useState("10");
+  const [repeatEndDate, setRepeatEndDate] = useState("");
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -754,6 +814,26 @@ function ScheduleDialog({
         startTime,
         durationMinutes: Number(duration),
         attendees: attendees.map((a) => a.email),
+        recurrence:
+          repeat === "none"
+            ? undefined
+            : {
+                frequency: repeat,
+                interval: Math.max(1, Number(repeatInterval) || 1),
+                daysOfWeek:
+                  repeat === "weekly" && repeatDays.length > 0
+                    ? repeatDays
+                    : undefined,
+                endType: repeatEnd,
+                endAfter:
+                  repeatEnd === "after"
+                    ? Math.max(1, Number(repeatCount) || 1)
+                    : undefined,
+                endDate:
+                  repeatEnd === "on" && repeatEndDate
+                    ? new Date(`${repeatEndDate}T23:59:59`).getTime()
+                    : undefined,
+              },
       });
       onScheduled(code);
       setTitle("");
@@ -761,6 +841,12 @@ function ScheduleDialog({
       setDate("");
       setTime("");
       setAttendees([]);
+      setRepeat("none");
+      setRepeatInterval("1");
+      setRepeatDays([]);
+      setRepeatEnd("never");
+      setRepeatCount("10");
+      setRepeatEndDate("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't schedule.");
     } finally {
@@ -845,6 +931,121 @@ function ScheduleDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Repeats
+            </label>
+            <Select
+              value={repeat}
+              onValueChange={(v) =>
+                setRepeat(v as "none" | "daily" | "weekly" | "monthly")
+              }
+            >
+              <SelectTrigger className="mt-1.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Does not repeat</SelectItem>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+              </SelectContent>
+            </Select>
+            {repeat !== "none" && (
+              <div className="mt-2 space-y-2.5 rounded-xl border border-border/70 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Every</span>
+                  <Select value={repeatInterval} onValueChange={setRepeatInterval}>
+                    <SelectTrigger className="h-8 w-16">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["1", "2", "3", "4"].map((n) => (
+                        <SelectItem key={n} value={n}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[11px] text-muted-foreground">
+                    {repeat === "daily"
+                      ? "day(s)"
+                      : repeat === "monthly"
+                        ? "month(s)"
+                        : "week(s)"}
+                  </span>
+                </div>
+                {repeat === "weekly" && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                      (d, i) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() =>
+                            setRepeatDays((prev) =>
+                              prev.includes(i)
+                                ? prev.filter((x) => x !== i)
+                                : [...prev, i].sort(),
+                            )
+                          }
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                            repeatDays.includes(i)
+                              ? "border-primary bg-primary/15 text-primary"
+                              : "border-border text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {d}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Ends</span>
+                  <Select
+                    value={repeatEnd}
+                    onValueChange={(v) =>
+                      setRepeatEnd(v as "never" | "after" | "on")
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="never">Never</SelectItem>
+                      <SelectItem value="after">After…</SelectItem>
+                      <SelectItem value="on">On date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {repeatEnd === "after" && (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={52}
+                        value={repeatCount}
+                        onChange={(e) => setRepeatCount(e.target.value)}
+                        className="h-8 w-16"
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        occurrences
+                      </span>
+                    </div>
+                  )}
+                  {repeatEnd === "on" && (
+                    <Input
+                      type="date"
+                      value={repeatEndDate}
+                      onChange={(e) => setRepeatEndDate(e.target.value)}
+                      className="h-8 w-40"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

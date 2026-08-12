@@ -21,6 +21,7 @@ import {
   LogIn,
   Moon,
   Palette,
+  Search,
   Settings,
   Sun,
   Video,
@@ -184,6 +185,13 @@ export function CommandPalette() {
                   <CommandItem onSelect={() => go("/history")} keywords={["past", "recordings"]}>
                     <History className="size-4" />
                     Meeting history
+                  </CommandItem>
+                  <CommandItem
+                    onSelect={() => go("/search")}
+                    keywords={["find", "notes", "transcript", "files"]}
+                  >
+                    <Search className="size-4" />
+                    Search workspace
                   </CommandItem>
                   <CommandItem onSelect={() => go("/settings")} keywords={["account", "prefs"]}>
                     <Settings className="size-4" />

@@ -116,10 +116,28 @@ const schema = defineSchema(
         v.literal("ended"),
         v.literal("cancelled"),
       ),
+      // recurrence for repeating meetings (Phase 47). Occurrences are
+      // materialized as sibling scheduledMeetings rows sharing a seriesId.
+      recurrence: v.optional(
+        v.object({
+          frequency: v.union(
+            v.literal("daily"),
+            v.literal("weekly"),
+            v.literal("monthly"),
+          ),
+          interval: v.number(), // every N days / weeks / months
+          daysOfWeek: v.optional(v.array(v.number())), // 0-6 (Sun-Sat), weekly only
+          endType: v.union(v.literal("never"), v.literal("after"), v.literal("on")),
+          endAfter: v.optional(v.number()), // number of occurrences
+          endDate: v.optional(v.number()), // epoch ms
+          seriesId: v.string(),
+        }),
+      ),
       createdAt: v.number(),
     })
       .index("by_code", ["code"])
-      .index("by_host", ["hostId"]),
+      .index("by_host", ["hostId"])
+      .index("by_series", ["recurrence.seriesId"]),
 
     // shared meeting notes (one doc per meeting)
     notes: defineTable({
@@ -177,6 +195,7 @@ const schema = defineSchema(
         v.literal("transcript"),
         v.literal("summary"),
         v.literal("actionItems"),
+        v.literal("minutes"),
       ),
       content: v.optional(v.string()),
       items: v.optional(v.array(v.string())),

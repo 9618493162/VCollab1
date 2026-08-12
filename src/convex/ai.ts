@@ -262,6 +262,95 @@ export const translateText = action({
   },
 });
 
+/**
+ * Generate structured meeting minutes from the transcript + agenda. Uses
+ * OpenAI when OPENAI_API_KEY is set; otherwise falls back to a deterministic
+ * summary assembled from the agenda and the opening transcript lines, so the
+ * feature works without credentials (never fake data).
+ */
+export const generateMinutes = action({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = normalizeCode(code);
+    const key = process.env.OPENAI_API_KEY;
+
+    const [transcripts, agenda] = await Promise.all([
+      loadAiData(ctx, normalized, "transcript"),
+      ctx.runQuery(api.agenda.listAgenda, { code: normalized }),
+    ]);
+    const transcript = transcripts[0]?.content ?? "";
+    const items = agenda ?? [];
+
+    const agendaBlock = items
+      .map(
+        (item, i) =>
+          `${i + 1}. ${item.title}${item.presenter ? ` (${item.presenter})` : ""}${item.status === "done" ? " — done" : ""}`,
+      )
+      .join("\n");
+
+    if (!transcript && items.length === 0) {
+      throw new Error(
+        "Nothing to write minutes from yet — record/transcribe the meeting or set an agenda first.",
+      );
+    }
+
+    let minutes: string;
+    if (key) {
+      minutes = await openaiChat(key, [
+        {
+          role: "system",
+          content:
+            "You write concise, well-structured meeting minutes. Output exactly these sections: ## Overview, ## Key Points, ## Decisions, ## Action Items (with owners when named), ## Follow-ups. No preamble, no fluff.",
+        },
+        {
+          role: "user",
+          content: [
+            items.length > 0 ? `## Agenda\n${agendaBlock}` : "",
+            transcript ? `## Transcript\n${transcript.slice(0, 28_000)}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        },
+      ]);
+    } else {
+      // Deterministic fallback: real data, just not LLM-polished.
+      const heads = transcript
+        .split("\n")
+        .filter(Boolean)
+        .slice(0, 12);
+      minutes = [
+        "## Overview",
+        items.length > 0
+          ? `Meeting covered ${items.length} agenda item(s).`
+          : "No agenda was set for this meeting.",
+        items.length > 0 ? `## Agenda\n${agendaBlock}` : "",
+        heads.length > 0
+          ? `## Key Points\n${heads.map((l) => `- ${l}`).join("\n")}`
+          : "",
+        "## Action Items\n- (add follow-ups on the meeting's task board)",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
+
+    await ctx.runMutation(internal.aiData.storeAiData, {
+      code: normalized,
+      kind: "minutes",
+      content: minutes,
+      model: key ? "gpt-4o-mini" : "agenda-fallback",
+    });
+
+    await notifyHost(
+      ctx,
+      normalized,
+      "Meeting minutes ready",
+      "Structured minutes were generated for your meeting.",
+      `/collab/${normalized}`,
+    );
+    return { minutes };
+  },
+});
+
 // ---- helpers ------------------------------------------------------------
 
 async function openaiChat(

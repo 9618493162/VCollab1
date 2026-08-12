@@ -64,6 +64,7 @@ export const storeAiData = internalMutation({
       v.literal("transcript"),
       v.literal("summary"),
       v.literal("actionItems"),
+      v.literal("minutes"),
     ),
     content: v.optional(v.string()),
     items: v.optional(v.array(v.string())),

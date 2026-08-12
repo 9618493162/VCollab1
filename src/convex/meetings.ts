@@ -36,6 +36,98 @@ export function normalizeEmails(raw: string[]): string[] {
   return out;
 }
 
+export type RecurrenceInput = {
+  frequency: "daily" | "weekly" | "monthly";
+  interval: number;
+  daysOfWeek?: number[];
+  endType: "never" | "after" | "on";
+  endAfter?: number;
+  endDate?: number;
+};
+
+/** Human label for a recurrence rule, e.g. "every 2 weeks". */
+export function recurrenceLabel(r: {
+  frequency: string;
+  interval?: number;
+}): string {
+  const n = Math.max(1, r.interval ?? 1);
+  switch (r.frequency) {
+    case "daily":
+      return n === 1 ? "daily" : `every ${n} days`;
+    case "weekly":
+      return n === 1 ? "weekly" : `every ${n} weeks`;
+    case "monthly":
+      return n === 1 ? "monthly" : `every ${n} months`;
+    default:
+      return "repeats";
+  }
+}
+
+/**
+ * Expand a recurrence rule into concrete start times (epoch ms) beginning at
+ * `startTime`. Occurrences are capped so bookings can't explode.
+ */
+export function occurrenceTimes(
+  startTime: number,
+  recurrence: RecurrenceInput,
+  cap = 52,
+): number[] {
+  const interval = Math.max(1, recurrence.interval || 1);
+  const endDate = recurrence.endDate ?? undefined;
+  const out: number[] = [];
+  const start = new Date(startTime);
+  const hour = start.getHours();
+  const minute = start.getMinutes();
+
+  const within = (t: number) =>
+    t >= startTime && (endDate === undefined || t <= endDate);
+  const push = (t: number) => {
+    if (within(t)) out.push(t);
+  };
+
+  if (recurrence.frequency === "weekly" && recurrence.daysOfWeek?.length) {
+    const days = [
+      ...new Set(recurrence.daysOfWeek.map((d) => ((d % 7) + 7) % 7)),
+    ].sort();
+    // Monday of the week containing startTime.
+    const weekStart = new Date(start);
+    weekStart.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    for (let w = 0; w < 520 && out.length < cap; w++) {
+      const week = new Date(weekStart);
+      week.setDate(weekStart.getDate() + w * interval * 7);
+      for (const day of days) {
+        if (out.length >= cap) break;
+        const cand = new Date(week);
+        cand.setDate(week.getDate() + day);
+        cand.setHours(hour, minute, 0, 0);
+        push(cand.getTime());
+      }
+    }
+  } else if (recurrence.frequency === "monthly") {
+    for (let i = 0; i < 520 && out.length < cap; i++) {
+      const cand = new Date(start);
+      cand.setDate(1);
+      cand.setMonth(cand.getMonth() + i * interval);
+      const last = new Date(cand.getFullYear(), cand.getMonth() + 1, 0).getDate();
+      cand.setDate(Math.min(start.getDate(), last));
+      cand.setHours(hour, minute, 0, 0);
+      push(cand.getTime());
+    }
+  } else {
+    // daily, or weekly without specific weekdays
+    const step = recurrence.frequency === "daily" ? 86_400_000 : 7 * 86_400_000;
+    for (let i = 0; i < 520 && out.length < cap; i++) {
+      push(startTime + i * interval * step);
+    }
+  }
+
+  const limit =
+    recurrence.endType === "after" && recurrence.endAfter !== undefined
+      ? recurrence.endAfter
+      : undefined;
+  return limit !== undefined && limit > 0 ? out.slice(0, limit) : out;
+}
+
 /** Registered users matching the given emails (best-effort lookup). */
 export async function usersByEmails(ctx: MutationCtx | QueryCtx, emails: string[]) {
   const users: Doc<"users">[] = [];
@@ -60,53 +152,108 @@ export const scheduleMeeting = mutation({
     startTime: v.number(),
     durationMinutes: v.number(),
     attendees: v.optional(v.array(v.string())),
+    recurrence: v.optional(
+      v.object({
+        frequency: v.union(
+          v.literal("daily"),
+          v.literal("weekly"),
+          v.literal("monthly"),
+        ),
+        interval: v.number(),
+        daysOfWeek: v.optional(v.array(v.number())),
+        endType: v.union(
+          v.literal("never"),
+          v.literal("after"),
+          v.literal("on"),
+        ),
+        endAfter: v.optional(v.number()),
+        endDate: v.optional(v.number()),
+      }),
+    ),
   },
-  handler: async (ctx, { title, description, startTime, durationMinutes, attendees }) => {
+  handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in to schedule a meeting");
 
+    const { title, description, startTime, durationMinutes, attendees, recurrence } =
+      args;
     const cleanTitle = title.trim().slice(0, 80) || "Untitled meeting";
     const cleanDesc = (description ?? "").trim().slice(0, 400);
     const duration = Math.min(Math.max(Math.round(durationMinutes), 5), 480);
     const emails = normalizeEmails(attendees ?? []);
 
-    let code = "";
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = generateRoomCode();
-      const existing = await ctx.db
-        .query("rooms")
-        .withIndex("by_code", (q) => q.eq("code", candidate))
-        .first();
-      if (existing === null) {
-        code = candidate;
-        break;
+    // Recurring meetings are materialized as one room + scheduled row per
+    // occurrence, all sharing a seriesId (Phase 47).
+    const times =
+      recurrence === undefined ? [startTime] : occurrenceTimes(startTime, recurrence, 52);
+    const seriesId =
+      recurrence === undefined
+        ? undefined
+        : `sr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+    let firstCode = "";
+    for (let i = 0; i < times.length; i++) {
+      const occTime = times[i];
+
+      let code = "";
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidate = generateRoomCode();
+        const existing = await ctx.db
+          .query("rooms")
+          .withIndex("by_code", (q) => q.eq("code", candidate))
+          .first();
+        if (existing === null) {
+          code = candidate;
+          break;
+        }
+      }
+      if (code === "") throw new Error("Couldn't generate a code, try again.");
+
+      await ctx.db.insert("rooms", {
+        code,
+        createdBy: userId,
+        createdAt: Date.now(),
+        title: cleanTitle,
+        status: "scheduled",
+        locked: false,
+      });
+
+      await ctx.db.insert("scheduledMeetings", {
+        code,
+        hostId: userId,
+        title: cleanTitle,
+        description: cleanDesc || undefined,
+        startTime: occTime,
+        durationMinutes: duration,
+        attendees: emails.length > 0 ? emails : undefined,
+        status: "scheduled",
+        recurrence:
+          recurrence !== undefined && seriesId !== undefined
+            ? { ...recurrence, seriesId }
+            : undefined,
+        createdAt: Date.now(),
+      });
+
+      if (firstCode === "") firstCode = code;
+
+      // Reminder ~10 minutes before each occurrence (best-effort; skipped
+      // when the meeting is too far out or the scheduler is unavailable).
+      const delay = occTime - 10 * 60_000 - Date.now();
+      if (delay > 0) {
+        try {
+          await ctx.scheduler.runAfter(
+            Math.min(delay, 7 * 24 * 60 * 60_000),
+            internal.meetings.remindScheduled,
+            { code },
+          );
+        } catch {
+          // reminders are best-effort
+        }
       }
     }
-    if (code === "") throw new Error("Couldn't generate a code, try again.");
 
-    await ctx.db.insert("rooms", {
-      code,
-      createdBy: userId,
-      createdAt: Date.now(),
-      title: cleanTitle,
-      status: "scheduled",
-      locked: false,
-    });
-
-    await ctx.db.insert("scheduledMeetings", {
-      code,
-      hostId: userId,
-      title: cleanTitle,
-      description: cleanDesc || undefined,
-      startTime,
-      durationMinutes: duration,
-      attendees: emails.length > 0 ? emails : undefined,
-      status: "scheduled",
-      createdAt: Date.now(),
-    });
-
-    // Invite registered attendees (best-effort — only users who have an
-    // account matching the email get an in-app invitation).
+    // Invite notifications + email only for the first occurrence, so a
+    // weekly series doesn't spam the same invite 52 times (best-effort).
     const host = await ctx.db.get(userId);
     const hostEmail = host?.email?.toLowerCase();
     const invitees = await usersByEmails(ctx, emails.filter((e) => e !== hostEmail));
@@ -121,30 +268,14 @@ export const scheduleMeeting = mutation({
         userId: u._id,
         type: "invite",
         title: `You're invited: ${cleanTitle}`,
-        body: `${when} · code ${code}`,
-        link: `/call/${code}`,
+        body: `${when} · code ${firstCode}`,
+        link: `/call/${firstCode}`,
       });
     }
 
-    // Reminder ~10 minutes before start (best-effort; skipped when the
-    // meeting is too far out to schedule or the scheduler is unavailable).
-    const delay = startTime - 10 * 60_000 - Date.now();
-    if (delay > 0) {
-      try {
-        await ctx.scheduler.runAfter(
-          Math.min(delay, 7 * 24 * 60 * 60_000),
-          internal.meetings.remindScheduled,
-          { code },
-        );
-      } catch {
-        // reminders are best-effort
-      }
-    }
-
-    // Send the invite email to every listed attendee (best-effort).
     try {
       await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
-        code,
+        code: firstCode,
         kind: "invite",
         title: cleanTitle,
         startTime,
@@ -156,7 +287,7 @@ export const scheduleMeeting = mutation({
       // email is best-effort
     }
 
-    return code;
+    return firstCode;
   },
 });
 
@@ -221,10 +352,16 @@ export const remindScheduled = internalMutation({
   },
 });
 
-/** Cancel a scheduled meeting (host only). */
+/**
+ * Cancel a scheduled meeting (host only). With scope: "series" and a meeting
+ * that belongs to a recurring series, every future occurrence is cancelled.
+ */
 export const cancelScheduled = mutation({
-  args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  args: {
+    code: v.string(),
+    scope: v.optional(v.union(v.literal("this"), v.literal("series"))),
+  },
+  handler: async (ctx, { code, scope }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in to manage meetings");
     const normalized = normalizeCode(code);
@@ -235,15 +372,52 @@ export const cancelScheduled = mutation({
     if (scheduled === null) throw new Error("Scheduled meeting not found.");
     if (scheduled.hostId !== userId)
       throw new Error("Only the host can cancel this meeting.");
-    await ctx.db.patch(scheduled._id, { status: "cancelled" });
-    const room = await getRoomByCode(ctx, normalized);
-    if (room && room.createdBy === userId) {
-      await ctx.db.patch(room._id, { status: "ended" });
+
+    const cancelled: Array<{
+      code: string;
+      title: string;
+      description?: string;
+      startTime: number;
+      durationMinutes: number;
+      attendees?: string[];
+    }> = [];
+
+    const patchCancelled = async (m: Doc<"scheduledMeetings">) => {
+      if (m.status === "cancelled") return;
+      await ctx.db.patch(m._id, { status: "cancelled" });
+      const room = await getRoomByCode(ctx, m.code);
+      if (room && room.createdBy === userId) {
+        await ctx.db.patch(room._id, { status: "ended" });
+      }
+      cancelled.push({
+        code: m.code,
+        title: m.title,
+        description: m.description,
+        startTime: m.startTime,
+        durationMinutes: m.durationMinutes,
+        attendees: m.attendees,
+      });
+    };
+
+    if (scope === "series" && scheduled.recurrence !== undefined) {
+      const all = await ctx.db
+        .query("scheduledMeetings")
+        .withIndex("by_series", (q) =>
+          q.eq("recurrence.seriesId", scheduled.recurrence!.seriesId),
+        )
+        .collect();
+      for (const m of all) await patchCancelled(m);
+    } else {
+      await patchCancelled(scheduled);
     }
 
-    // Let registered attendees know the meeting is off (best-effort).
-    const when = new Date(scheduled.startTime).toLocaleString();
-    for (const u of await usersByEmails(ctx, scheduled.attendees ?? [])) {
+    if (cancelled.length === 0) return;
+
+    // Notify + email for the first cancelled occurrence only (best-effort,
+    // avoids spamming attendees for every occurrence of a cancelled series).
+    const first = cancelled[0];
+    const when = new Date(first.startTime).toLocaleString();
+    for (const u of await usersByEmails(ctx, first.attendees ?? [])) {
       const wantsCancels = await ctx.runQuery(internal.settings.shouldNotify, {
         userId: u._id,
         type: "invite",
@@ -252,25 +426,95 @@ export const cancelScheduled = mutation({
       await createNotification(ctx, {
         userId: u._id,
         type: "meeting",
-        title: `Cancelled: ${scheduled.title}`,
+        title: `Cancelled: ${first.title}${cancelled.length > 1 ? " (series)" : ""}`,
         body: `${when} is no longer happening.`,
       });
     }
 
-    // Cancellation email to everyone on the list (best-effort).
     try {
       await ctx.scheduler.runAfter(0, internal.emails.sendMeetingEmail, {
-        code: normalized,
+        code: first.code,
         kind: "cancelled",
-        title: scheduled.title,
-        startTime: scheduled.startTime,
-        durationMinutes: scheduled.durationMinutes,
-        description: scheduled.description,
-        attendees: scheduled.attendees ?? [],
+        title: first.title,
+        startTime: first.startTime,
+        durationMinutes: first.durationMinutes,
+        description: first.description,
+        attendees: first.attendees ?? [],
       });
     } catch {
       // email is best-effort
     }
+  },
+});
+
+/**
+ * Edit a recurring series (host only): updates title/description/duration on
+ * every non-cancelled occurrence and optionally shifts all future start times
+ * by the same delta. Returns the number of occurrences updated.
+ */
+export const editSeries = mutation({
+  args: {
+    code: v.string(),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    durationMinutes: v.optional(v.number()),
+    startTime: v.optional(v.number()),
+  },
+  handler: async (ctx, { code, title, description, durationMinutes, startTime }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to manage meetings");
+    const normalized = normalizeCode(code);
+    const scheduled = await ctx.db
+      .query("scheduledMeetings")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (scheduled === null) throw new Error("Scheduled meeting not found.");
+    if (scheduled.hostId !== userId)
+      throw new Error("Only the host can edit this series.");
+    const seriesId = scheduled.recurrence?.seriesId;
+    if (seriesId === undefined)
+      throw new Error("This meeting isn't part of a recurring series.");
+
+    const all = await ctx.db
+      .query("scheduledMeetings")
+      .withIndex("by_series", (q) => q.eq("recurrence.seriesId", seriesId))
+      .collect();
+
+    const cleanTitle =
+      title !== undefined
+        ? title.trim().slice(0, 80) || "Untitled meeting"
+        : undefined;
+    const cleanDesc =
+      description !== undefined ? description.trim().slice(0, 400) : undefined;
+    const duration =
+      durationMinutes !== undefined
+        ? Math.min(Math.max(Math.round(durationMinutes), 5), 480)
+        : undefined;
+
+    // Shifting the series by the delta from the anchor occurrence keeps the
+    // whole series' rhythm intact.
+    const delta = startTime !== undefined ? startTime - scheduled.startTime : 0;
+
+    let updated = 0;
+    for (const m of all) {
+      if (m.status === "cancelled") continue;
+      await ctx.db.patch(m._id, {
+        ...(cleanTitle !== undefined ? { title: cleanTitle } : {}),
+        ...(cleanDesc !== undefined ? { description: cleanDesc || undefined } : {}),
+        ...(duration !== undefined ? { durationMinutes: duration } : {}),
+        ...(delta !== 0 ? { startTime: m.startTime + delta } : {}),
+      });
+      if (cleanTitle !== undefined || delta !== 0) {
+        const room = await getRoomByCode(ctx, m.code);
+        if (room && room.createdBy === userId) {
+          await ctx.db.patch(room._id, {
+            ...(cleanTitle !== undefined ? { title: cleanTitle } : {}),
+          });
+        }
+      }
+      updated++;
+    }
+    return updated;
   },
 });
 

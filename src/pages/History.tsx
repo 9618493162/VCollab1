@@ -384,13 +384,42 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
   const summaries = useQuery(api.aiData.getAiData, { code, kind: "summary" });
   const transcripts = useQuery(api.aiData.getAiData, { code, kind: "transcript" });
   const actionItems = useQuery(api.aiData.getAiData, { code, kind: "actionItems" });
+  const minutes = useQuery(api.aiData.getAiData, { code, kind: "minutes" });
   const recordings = useQuery(api.call.listRecordings, { code });
   const summarize = useAction(api.ai.summarizeTranscript);
+  const generateMinutes = useAction(api.ai.generateMinutes);
   const [generating, setGenerating] = useState(false);
+  const [generatingMinutes, setGeneratingMinutes] = useState(false);
 
   const summary = summaries?.[0];
   const transcript = transcripts?.[0];
   const items = actionItems?.[0]?.items ?? [];
+  const meetingMinutes = minutes?.[0];
+
+  const downloadMinutes = () => {
+    if (!meetingMinutes?.content) return;
+    const blob = new Blob([meetingMinutes.content], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${code}-minutes.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateMinutes = async () => {
+    setGeneratingMinutes(true);
+    try {
+      await generateMinutes({ code });
+      toast.success("Meeting minutes generated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't generate minutes.");
+    } finally {
+      setGeneratingMinutes(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -414,7 +443,10 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="summary">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6">
+            <TabsTrigger value="minutes">
+              <FileText className="mr-1.5 size-3.5" /> Minutes
+            </TabsTrigger>
             <TabsTrigger value="summary">
               <Sparkles className="mr-1.5 size-3.5" /> Summary
             </TabsTrigger>
@@ -431,6 +463,46 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
               <MessageSquareText className="mr-1.5 size-3.5" /> Chat
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="minutes" className="max-h-96 overflow-y-auto">
+            {meetingMinutes ? (
+              <div>
+                <div className="mb-3 flex items-center justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={downloadMinutes}
+                  >
+                    <Download className="mr-1.5 size-3.5" /> Download .md
+                  </Button>
+                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-6">
+                  {meetingMinutes.content}
+                </pre>
+              </div>
+            ) : (
+              <div className="py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No minutes yet. Generate structured minutes from the
+                  transcript + agenda — works even without an OpenAI key (it
+                  falls back to a deterministic summary).
+                </p>
+                <Button
+                  className="mt-4 rounded-full"
+                  onClick={() => void handleGenerateMinutes()}
+                  disabled={generatingMinutes}
+                >
+                  {generatingMinutes ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <FileText className="mr-2 size-4" />
+                  )}
+                  Generate minutes
+                </Button>
+              </div>
+            )}
+          </TabsContent>
 
           <TabsContent value="summary" className="max-h-96 overflow-y-auto">
             {summary ? (

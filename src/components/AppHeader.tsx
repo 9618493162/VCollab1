@@ -43,7 +43,7 @@ const TYPE_ICONS: Record<string, string> = {
 export function AppHeader({
   active,
 }: {
-  active: "dashboard" | "history" | "settings" | "calendar";
+  active: "dashboard" | "history" | "settings" | "calendar" | "search";
 }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -79,6 +79,12 @@ export function AppHeader({
               onClick={() => navigate("/history")}
               icon={<History className="size-3.5" />}
               label="History"
+            />
+            <NavLink
+              active={active === "search"}
+              onClick={() => navigate("/search")}
+              icon={<Search className="size-3.5" />}
+              label="Search"
             />
           </nav>
         </div>
@@ -205,6 +211,9 @@ export function AppHeader({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/history")}>
                 <History className="mr-2 size-4" /> Meeting history
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/search")}>
+                <Search className="mr-2 size-4" /> Search workspace
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/settings")}>
                 <Settings className="mr-2 size-4" /> Settings

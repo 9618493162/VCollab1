@@ -23,6 +23,7 @@ import History from "./pages/History";
 import SettingsPage from "./pages/Settings";
 import Collab from "./pages/Collab";
 import Calendar from "./pages/Calendar";
+import SearchPage from "./pages/Search";
 import NotFound from "./pages/NotFound";
 import { CommandPalette } from "./components/CommandPalette";
 
@@ -168,6 +169,14 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <Calendar />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/search"
+                element={
+                  <RequireAuth>
+                    <SearchPage />
                   </RequireAuth>
                 }
               />
