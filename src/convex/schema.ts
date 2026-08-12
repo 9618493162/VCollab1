@@ -283,6 +283,82 @@ const schema = defineSchema(
       createdBy: v.id("users"),
       createdAt: v.number(),
     }).index("by_code", ["code"]),
+
+    // --- Team collaboration (Phases 48-53) ---
+
+    // team workspaces: containers for members, channels, meetings, notes, tasks
+    workspaces: defineTable({
+      name: v.string(),
+      description: v.optional(v.string()),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+    }).index("by_createdBy", ["createdBy"]),
+
+    // membership + roles (owner > admin > member > guest)
+    workspaceMembers: defineTable({
+      workspaceId: v.id("workspaces"),
+      userId: v.id("users"),
+      role: v.union(
+        v.literal("owner"),
+        v.literal("admin"),
+        v.literal("member"),
+        v.literal("guest"),
+      ),
+      joinedAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_user", ["userId"]),
+
+    // channels inside a workspace (e.g. #general, #engineering)
+    channels: defineTable({
+      workspaceId: v.id("workspaces"),
+      name: v.string(),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+    }).index("by_workspace", ["workspaceId"]),
+
+    // messages inside a channel
+    channelMessages: defineTable({
+      channelId: v.id("channels"),
+      userId: v.id("users"),
+      userName: v.string(),
+      text: v.string(),
+      createdAt: v.number(),
+    }).index("by_channel", ["channelId"]),
+
+    // 1:1 direct message threads (key = sorted user id pair)
+    dmThreads: defineTable({
+      key: v.string(),
+      userIds: v.array(v.id("users")),
+      createdAt: v.number(),
+      lastMessageAt: v.number(),
+      lastMessagePreview: v.optional(v.string()),
+      lastMessageFrom: v.optional(v.id("users")),
+    })
+      .index("by_key", ["key"])
+      .index("by_lastMessageAt", ["lastMessageAt"]),
+
+    // messages inside a DM thread; readBy tracks who has seen them
+    dmMessages: defineTable({
+      threadId: v.id("dmThreads"),
+      fromId: v.id("users"),
+      fromName: v.string(),
+      text: v.string(),
+      createdAt: v.number(),
+      readBy: v.array(v.id("users")),
+    }).index("by_thread", ["threadId"]),
+
+    // user status presence (distinct from in-call `presence`)
+    userPresence: defineTable({
+      userId: v.id("users"),
+      status: v.union(
+        v.literal("available"),
+        v.literal("away"),
+        v.literal("dnd"),
+        v.literal("offline"),
+      ),
+      lastSeen: v.number(),
+    }).index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,

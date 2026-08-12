@@ -1,5 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
+import { usePresence } from "@/hooks/use-presence";
+import { PresenceDot } from "@/components/PresenceDot";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
@@ -22,7 +24,9 @@ import {
   CheckCheck,
   History,
   LayoutGrid,
+  Layers,
   LogOut,
+  MessageSquare,
   Search,
   Settings,
 } from "lucide-react";
@@ -43,14 +47,23 @@ const TYPE_ICONS: Record<string, string> = {
 export function AppHeader({
   active,
 }: {
-  active: "dashboard" | "history" | "settings" | "calendar" | "search";
+  active:
+    | "dashboard"
+    | "history"
+    | "settings"
+    | "calendar"
+    | "search"
+    | "workspaces"
+    | "messages";
 }) {
   const { user, signOut } = useAuth();
+  usePresence();
   const navigate = useNavigate();
   const notifications = useQuery(api.notifications.listNotifications);
   const unread = useQuery(api.notifications.unreadCount);
   const markAllRead = useMutation(api.notifications.markAllRead);
   const markRead = useMutation(api.notifications.markRead);
+  const setStatus = useMutation(api.presence.setStatus);
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
 
@@ -85,6 +98,18 @@ export function AppHeader({
               onClick={() => navigate("/search")}
               icon={<Search className="size-3.5" />}
               label="Search"
+            />
+            <NavLink
+              active={active === "workspaces"}
+              onClick={() => navigate("/workspaces")}
+              icon={<Layers className="size-3.5" />}
+              label="Workspaces"
+            />
+            <NavLink
+              active={active === "messages"}
+              onClick={() => navigate("/messages")}
+              icon={<MessageSquare className="size-3.5" />}
+              label="Messages"
             />
           </nav>
         </div>
@@ -209,6 +234,12 @@ export function AppHeader({
               <DropdownMenuItem onClick={() => navigate("/calendar")}>
                 <Calendar className="mr-2 size-4" /> Calendar
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/workspaces")}>
+                <Layers className="mr-2 size-4" /> Workspaces
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/messages")}>
+                <MessageSquare className="mr-2 size-4" /> Messages
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/history")}>
                 <History className="mr-2 size-4" /> Meeting history
               </DropdownMenuItem>
@@ -218,6 +249,30 @@ export function AppHeader({
               <DropdownMenuItem onClick={() => navigate("/settings")}>
                 <Settings className="mr-2 size-4" /> Settings
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>
+                <p className="text-xs font-medium text-muted-foreground">Set status</p>
+                <div className="mt-1.5 flex items-center gap-1">
+                  {(
+                    [
+                      ["available", "bg-emerald-500"] as const,
+                      ["away", "bg-amber-400"] as const,
+                      ["dnd", "bg-rose-500"] as const,
+                    ] as const
+                  ).map(([status, color]) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => void setStatus({ status })}
+                      title={status}
+                      className="flex size-6 items-center justify-center rounded-full border border-border/70 transition-colors hover:bg-muted/60"
+                      aria-label={`Set status to ${status}`}
+                    >
+                      <PresenceDot status={status} className={color} />
+                    </button>
+                  ))}
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => void signOut().then(() => navigate("/"))}

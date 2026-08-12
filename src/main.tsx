@@ -24,6 +24,9 @@ import SettingsPage from "./pages/Settings";
 import Collab from "./pages/Collab";
 import Calendar from "./pages/Calendar";
 import SearchPage from "./pages/Search";
+import Workspaces from "./pages/Workspaces";
+import WorkspaceDetail from "./pages/WorkspaceDetail";
+import Messages from "./pages/Messages";
 import NotFound from "./pages/NotFound";
 import { CommandPalette } from "./components/CommandPalette";
 
@@ -177,6 +180,30 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <SearchPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/workspaces"
+                element={
+                  <RequireAuth>
+                    <Workspaces />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/workspaces/:workspaceId"
+                element={
+                  <RequireAuth>
+                    <WorkspaceDetail />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/messages"
+                element={
+                  <RequireAuth>
+                    <Messages />
                   </RequireAuth>
                 }
               />
