@@ -22,7 +22,9 @@ import Call from "./pages/Call";
 import History from "./pages/History";
 import SettingsPage from "./pages/Settings";
 import Collab from "./pages/Collab";
+import Calendar from "./pages/Calendar";
 import NotFound from "./pages/NotFound";
+import { CommandPalette } from "./components/CommandPalette";
 
 /** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
  *  crashing the whole app (e.g. hook errors in WebContainer environment). */
@@ -161,12 +163,21 @@ createRoot(document.getElementById("root")!).render(
                   </RequireAuth>
                 }
               />
+              <Route
+                path="/calendar"
+                element={
+                  <RequireAuth>
+                    <Calendar />
+                  </RequireAuth>
+                }
+              />
               {/* Public on purpose: anyone with a link can join a call — no
                   account needed on their side. Starting meetings stays gated
                   behind /dashboard's RequireAuth. */}
               <Route path="/call/:code" element={<Call />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <CommandPalette />
           </BrowserRouter>
           <Toaster />
         </ThemeProvider>

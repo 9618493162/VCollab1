@@ -47,12 +47,13 @@ import {
   Users,
   Video,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AttendeePicker } from "@/components/AttendeePicker";
 import { ManageAttendeesDialog } from "@/components/ManageAttendeesDialog";
+import { AgendaDialog } from "@/components/AgendaDialog";
 
 function extractCode(raw: string): string {
   const match = raw
@@ -89,6 +90,21 @@ export default function Dashboard() {
     code: string;
     title: string;
   } | null>(null);
+  const [agendaTarget, setAgendaTarget] = useState<{
+    code: string;
+    title: string;
+  } | null>(null);
+
+  // Command palette / deep link: /dashboard?schedule=1 opens the schedule dialog
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("schedule") === "1") {
+      setScheduleOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("schedule");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const cancelScheduled = useMutation(api.meetings.cancelScheduled);
   const respondRsvp = useMutation(api.meetings.respondRsvp);
   const [cancelling, setCancelling] = useState(false);
@@ -459,6 +475,18 @@ export default function Dashboard() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="rounded-full"
+                                onClick={() =>
+                                  setAgendaTarget({ code: m.code, title: m.title })
+                                }
+                              >
+                                <ClipboardList className="mr-1.5 size-3.5" /> Agenda
+                              </Button>
+                            )}
+                            {isHost && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 onClick={() =>
                                   setCancelTarget({ code: m.code, title: m.title })
@@ -621,6 +649,12 @@ export default function Dashboard() {
         open={manageTarget !== null}
         onOpenChange={(open) => !open && setManageTarget(null)}
         meeting={manageTarget}
+      />
+
+      <AgendaDialog
+        open={agendaTarget !== null}
+        onOpenChange={(open) => !open && setAgendaTarget(null)}
+        meeting={agendaTarget}
       />
 
       <AlertDialog

@@ -24,12 +24,13 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { ManageAttendeesDialog } from "@/components/ManageAttendeesDialog";
 import { MeetingChat } from "@/components/MeetingChat";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
   CalendarClock,
   CalendarX,
   ClipboardList,
+  Download,
   FileText,
   Loader2,
   MessageSquareText,
@@ -64,6 +65,29 @@ export default function History() {
     title: string;
   } | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const convex = useConvex();
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await convex.query(api.export.exportUserData);
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `vcollab-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Your data is downloading — meetings, notes, tasks, chat, AI, polls.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   type Scheduled = NonNullable<typeof scheduled>[number];
   const [manageTarget, setManageTarget] = useState<Scheduled | null>(null);
@@ -127,14 +151,31 @@ export default function History() {
               Meeting history
             </h1>
           </div>
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by title or code…"
-              className="rounded-full pl-10"
-            />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by title or code…"
+                className="rounded-full pl-10"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 rounded-full"
+              onClick={() => void handleExport()}
+              disabled={exporting}
+              title="Download all your VCollab data as JSON"
+            >
+              {exporting ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <Download className="mr-1.5 size-3.5" />
+              )}
+              Export data
+            </Button>
           </div>
         </div>
 

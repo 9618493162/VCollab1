@@ -206,6 +206,64 @@ const schema = defineSchema(
       uploadedByName: v.string(),
       createdAt: v.number(),
     }).index("by_code", ["code"]),
+
+    // live meeting polls (Phase 30). Votes live in `pollVotes`.
+    polls: defineTable({
+      code: v.string(),
+      title: v.string(),
+      type: v.union(
+        v.literal("single"),
+        v.literal("multiple"),
+        v.literal("anonymous"),
+      ),
+      options: v.array(v.string()),
+      createdBy: v.id("users"),
+      createdByName: v.optional(v.string()),
+      createdAt: v.number(),
+      launched: v.boolean(),
+      closed: v.boolean(),
+      showResults: v.boolean(),
+    }).index("by_code", ["code"]),
+
+    // one row per (poll, voter, choice) — counts are derived from these
+    pollVotes: defineTable({
+      pollId: v.id("polls"),
+      code: v.string(),
+      voter: v.string(), // clientId (anonymous polls still dedupe votes)
+      name: v.optional(v.string()), // omitted for anonymous polls
+      choice: v.number(), // index into poll.options
+      createdAt: v.number(),
+    }).index("by_poll", ["pollId"]),
+
+    // Q&A questions for a meeting (Phase 31)
+    qaQuestions: defineTable({
+      code: v.string(),
+      clientId: v.string(), // asker's call client id
+      authorName: v.string(),
+      text: v.string(),
+      upvoters: v.array(v.string()), // clientIds that upvoted
+      answered: v.boolean(),
+      answer: v.optional(v.string()),
+      pinned: v.boolean(),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
+
+    // meeting agenda items (Phase 38)
+    agendaItems: defineTable({
+      code: v.string(),
+      title: v.string(),
+      description: v.optional(v.string()),
+      durationMinutes: v.optional(v.number()),
+      presenter: v.optional(v.string()),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("active"),
+        v.literal("done"),
+      ),
+      position: v.number(),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
   },
   {
     schemaValidation: false,

@@ -16,7 +16,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, CheckCheck, History, LayoutGrid, LogOut, Settings } from "lucide-react";
+import {
+  Bell,
+  Calendar,
+  CheckCheck,
+  History,
+  LayoutGrid,
+  LogOut,
+  Search,
+  Settings,
+} from "lucide-react";
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -34,7 +43,7 @@ const TYPE_ICONS: Record<string, string> = {
 export function AppHeader({
   active,
 }: {
-  active: "dashboard" | "history" | "settings";
+  active: "dashboard" | "history" | "settings" | "calendar";
 }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -60,6 +69,12 @@ export function AppHeader({
               label="Dashboard"
             />
             <NavLink
+              active={active === "calendar"}
+              onClick={() => navigate("/calendar")}
+              icon={<Calendar className="size-3.5" />}
+              label="Calendar"
+            />
+            <NavLink
               active={active === "history"}
               onClick={() => navigate("/history")}
               icon={<History className="size-3.5" />}
@@ -69,6 +84,19 @@ export function AppHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("vcollab:open-palette"))}
+            aria-label="Open command palette"
+            title="Command palette (Ctrl/Cmd + K)"
+            className="hidden h-9 items-center gap-2 rounded-full border border-border/80 bg-card/60 px-3 text-muted-foreground transition-all hover:text-foreground hover:shadow-md dark:bg-white/5 md:flex"
+          >
+            <Search className="size-3.5" />
+            <span className="text-xs">Search…</span>
+            <kbd className="rounded border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px]">
+              ⌘K
+            </kbd>
+          </button>
           <ThemeToggle />
 
           <Popover>
@@ -171,6 +199,9 @@ export function AppHeader({
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate("/dashboard")}>
                 <LayoutGrid className="mr-2 size-4" /> Dashboard
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/calendar")}>
+                <Calendar className="mr-2 size-4" /> Calendar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/history")}>
                 <History className="mr-2 size-4" /> Meeting history

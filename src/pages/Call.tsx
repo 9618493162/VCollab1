@@ -6,21 +6,26 @@ import { Input } from "@/components/ui/input";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  BarChart3,
   Captions,
   Check,
   Copy,
   Hand,
+  Keyboard,
   Languages,
   LayoutGrid,
+  ListChecks,
   Lock,
   LockOpen,
   LogOut,
   Maximize2,
   MessageSquare,
+  MessagesSquare,
   Mic,
   MicOff,
   Minimize2,
   MonitorUp,
+  MoreVertical,
   PhoneOff,
   PictureInPicture2,
   Radio,
@@ -33,6 +38,16 @@ import {
   VideoOff,
   X,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PollsPanel } from "@/components/PollsPanel";
+import { QAPanel } from "@/components/QAPanel";
+import { AgendaPanel } from "@/components/AgendaPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { cn } from "@/lib/utils";
@@ -119,7 +134,10 @@ export default function Call() {
     user?.name?.split(" ")[0] ?? "You",
   );
   const [entered, setEntered] = useState(false);
-  const [panel, setPanel] = useState<"none" | "chat" | "people">("none");
+  const [panel, setPanel] = useState<
+    "none" | "chat" | "people" | "polls" | "qa" | "agenda"
+  >("none");
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<"gallery" | "speaker" | "focus">("gallery");
   const [showReactions, setShowReactions] = useState(false);
@@ -281,6 +299,48 @@ export default function Call() {
     }
   };
 
+  // meeting keyboard shortcuts (M/C/S/R/H/P/?). Ignored while typing.
+  useEffect(() => {
+    if (!entered) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      )
+        return;
+      const key = event.key.toLowerCase();
+      if (key === "m") {
+        event.preventDefault();
+        call.toggleMic();
+      } else if (key === "c") {
+        event.preventDefault();
+        call.toggleCam();
+      } else if (key === "s") {
+        event.preventDefault();
+        void call.toggleShare();
+      } else if (key === "h") {
+        event.preventDefault();
+        call.toggleHand();
+      } else if (key === "r") {
+        event.preventDefault();
+        setShowReactions((v) => !v);
+      } else if (key === "p") {
+        event.preventDefault();
+        setPanel((p) => (p === "people" ? "none" : "people"));
+      } else if (key === "?") {
+        event.preventDefault();
+        setShowShortcuts((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entered]);
+
   const participantCount = call.participants?.length ?? (entered ? 1 : 0);
   const selfStream = call.sharing ? call.shareStream : call.localStream;
 
@@ -386,6 +446,40 @@ export default function Call() {
                 {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                 <span className="font-mono tracking-tight">{code}</span>
               </button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="More meeting options"
+                    title="More options"
+                    className="flex size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <MoreVertical className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "polls" ? "none" : "polls"))}
+                  >
+                    <BarChart3 className="mr-2 size-4" /> Polls
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "qa" ? "none" : "qa"))}
+                  >
+                    <MessagesSquare className="mr-2 size-4" /> Q&A
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "agenda" ? "none" : "agenda"))}
+                  >
+                    <ListChecks className="mr-2 size-4" /> Agenda
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setShowShortcuts(true)}>
+                    <Keyboard className="mr-2 size-4" /> Keyboard shortcuts
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <button
                 type="button"
@@ -789,7 +883,76 @@ export default function Call() {
               onClose={() => setPanel("none")}
             />
           )}
+          {panel === "polls" && (
+            <PollsPanel
+              code={code}
+              isHost={isHost === true}
+              clientId={call.clientId}
+              onClose={() => setPanel("none")}
+            />
+          )}
+          {panel === "qa" && (
+            <QAPanel
+              code={code}
+              isHost={isHost === true}
+              clientId={call.clientId}
+              onClose={() => setPanel("none")}
+            />
+          )}
+          {panel === "agenda" && (
+            <AgendaPanel
+              code={code}
+              isHost={isHost === true}
+              onClose={() => setPanel("none")}
+            />
+          )}
         </>
+      )}
+
+      {/* ---------- keyboard shortcuts help ---------- */}
+      {showShortcuts && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+          onClick={() => setShowShortcuts(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-white">Keyboard shortcuts</p>
+              <button
+                type="button"
+                onClick={() => setShowShortcuts(false)}
+                aria-label="Close shortcuts"
+                className="text-neutral-400 transition-colors hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              {[
+                ["M", "Mute / unmute microphone"],
+                ["C", "Turn camera on / off"],
+                ["S", "Start / stop presenting"],
+                ["R", "Open reactions"],
+                ["H", "Raise / lower hand"],
+                ["P", "People panel"],
+                ["?", "Show this help"],
+              ].map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between text-xs">
+                  <span className="text-neutral-300">{label}</span>
+                  <kbd className="rounded-md border border-white/20 bg-white/10 px-2 py-0.5 font-mono text-[11px] text-white">
+                    {key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-[11px] text-neutral-500">
+              Shortcuts are ignored while you're typing.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* ---------- PRE-JOIN ---------- */}
