@@ -144,7 +144,7 @@ export default function Call() {
   const [burst, setBurst] = useState<{ id: number; emoji: string; name: string }[]>([]);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number }>({ x: 16, y: 16 });
   const [selfMinimized, setSelfMinimized] = useState(false);
-  const [selfSize, setSelfSize] = useState<{ w: number; h: number }>({ w: 208, h: 117 });
+  const [selfSize] = useState<{ w: number; h: number }>({ w: 208, h: 117 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const burstId = useRef(0);
 
@@ -214,12 +214,6 @@ export default function Call() {
   const [translationNotice, setTranslationNotice] = useState<string | null>(null);
   const translatedIndexRef = useRef(-1);
   const translateTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    setTranslated(null);
-    setTranslationNotice(null);
-    translatedIndexRef.current = -1;
-  }, [translateTo]);
 
   useEffect(() => {
     const lines = call.captions;
@@ -524,7 +518,6 @@ export default function Call() {
                 speaking={call.speaking[activeSpeakerId]}
                 quality={call.quality[activeSpeakerId]}
                 presenting={call.participants?.find((p) => p.clientId === activeSpeakerId)?.sharing}
-                large
               />
             ) : (
               <div
@@ -678,7 +671,12 @@ export default function Call() {
                   <span className="opacity-70">Translate</span>
                   <select
                     value={translateTo ?? ""}
-                    onChange={(e) => setTranslateTo(e.target.value || null)}
+                    onChange={(e) => {
+                      setTranslateTo(e.target.value || null);
+                      setTranslated(null);
+                      setTranslationNotice(null);
+                      translatedIndexRef.current = -1;
+                    }}
                     aria-label="Translate captions to"
                     className="cursor-pointer rounded-full border border-white/20 bg-black/40 px-2 py-0.5 text-[11px] text-white outline-none transition-colors hover:border-white/40 [&>option]:bg-background [&>option]:text-foreground"
                   >
@@ -870,7 +868,6 @@ export default function Call() {
           {/* ---------- side panels ---------- */}
           {panel === "chat" && (
             <ChatPanel
-              code={code}
               call={call}
               onClose={() => setPanel("none")}
             />
@@ -1114,7 +1111,6 @@ function Tile({
   speaking,
   quality,
   presenting,
-  large,
 }: {
   peerId: string;
   stream: MediaStream;
@@ -1123,7 +1119,6 @@ function Tile({
   speaking?: boolean;
   quality?: PeerQuality;
   presenting?: boolean;
-  large?: boolean;
 }) {
   const camOff = trackState ? !trackState.video : false;
   const micOff = trackState ? !trackState.audio : false;
@@ -1203,11 +1198,9 @@ function ControlButton({
 /* ---------------- chat panel ---------------- */
 
 function ChatPanel({
-  code,
   call,
   onClose,
 }: {
-  code: string;
   call: ReturnType<typeof useCallRoom>;
   onClose: () => void;
 }) {

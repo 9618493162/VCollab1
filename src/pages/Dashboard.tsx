@@ -47,7 +47,7 @@ import {
   Users,
   Video,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -95,16 +95,11 @@ export default function Dashboard() {
     title: string;
   } | null>(null);
 
-  // Command palette / deep link: /dashboard?schedule=1 opens the schedule dialog
+  // Command palette / deep link: /dashboard?schedule=1 opens the schedule dialog.
+  // The dialog's open state is derived from the URL so no effect is needed —
+  // closing it clears the param.
   const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get("schedule") === "1") {
-      setScheduleOpen(true);
-      const next = new URLSearchParams(searchParams);
-      next.delete("schedule");
-      setSearchParams(next, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
+  const scheduleParam = searchParams.get("schedule") === "1";
   const cancelScheduled = useMutation(api.meetings.cancelScheduled);
   const respondRsvp = useMutation(api.meetings.respondRsvp);
   const [cancelling, setCancelling] = useState(false);
@@ -636,8 +631,15 @@ export default function Dashboard() {
       </main>
 
       <ScheduleDialog
-        open={scheduleOpen}
-        onOpenChange={setScheduleOpen}
+        open={scheduleOpen || scheduleParam}
+        onOpenChange={(open) => {
+          setScheduleOpen(open);
+          if (!open && scheduleParam) {
+            const next = new URLSearchParams(searchParams);
+            next.delete("schedule");
+            setSearchParams(next, { replace: true });
+          }
+        }}
         onScheduled={(code) => {
           setScheduleOpen(false);
           void handleCopy(code);
