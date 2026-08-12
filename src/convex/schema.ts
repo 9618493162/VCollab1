@@ -93,6 +93,8 @@ const schema = defineSchema(
     scheduledMeetings: defineTable({
       code: v.string(),
       hostId: v.id("users"),
+      workspaceId: v.optional(v.id("workspaces")), // workspace-scoped meetings (Phase 60)
+
       title: v.string(),
       description: v.optional(v.string()),
       startTime: v.number(), // epoch ms
@@ -138,6 +140,7 @@ const schema = defineSchema(
     })
       .index("by_code", ["code"])
       .index("by_host", ["hostId"])
+      .index("by_workspace", ["workspaceId"])
       .index("by_series", ["recurrence.seriesId"]),
 
     // shared meeting notes (one doc per meeting)
