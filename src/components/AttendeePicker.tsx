@@ -2,7 +2,7 @@ import { api } from "@/convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { useQuery } from "convex/react";
 import { Mail, Plus, Search, UserRoundPlus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,6 +24,15 @@ export function AttendeePicker({
   const [open, setOpen] = useState(false);
   const [draftEmail, setDraftEmail] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const blurTimerRef = useRef<number | null>(null);
+
+  // Cancel the pending blur-close timer if the picker unmounts before it fires
+  // (avoids a state update after the component is gone).
+  useEffect(() => {
+    return () => {
+      if (blurTimerRef.current !== null) window.clearTimeout(blurTimerRef.current);
+    };
+  }, []);
 
   const results = useQuery(
     api.users.searchUsers,
@@ -106,7 +115,10 @@ export function AttendeePicker({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() => {
+            if (blurTimerRef.current !== null) window.clearTimeout(blurTimerRef.current);
+            blurTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Search people or type an email…"
           autoComplete="off"
