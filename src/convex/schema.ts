@@ -30,6 +30,7 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+      onboardedAt: v.optional(v.number()), // first-run wizard completion time (Phase 57)
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     // a video meeting room, keyed by a human-shareable code
@@ -377,6 +378,17 @@ const schema = defineSchema(
     })
       .index("by_code", ["code"])
       .index("by_room", ["roomId"]),
+
+    // --- Help center (Phase 58) ---
+
+    // support requests submitted from the help center
+    supportTickets: defineTable({
+      userId: v.id("users"),
+      subject: v.string(),
+      message: v.string(),
+      status: v.union(v.literal("open"), v.literal("resolved")),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
 
     // --- Shared in-call whiteboard (Phase 56) ---
 

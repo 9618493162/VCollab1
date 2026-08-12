@@ -22,6 +22,7 @@ import {
   Bell,
   Calendar,
   CheckCheck,
+  CircleHelp,
   History,
   LayoutGrid,
   Layers,
@@ -29,6 +30,7 @@ import {
   MessageSquare,
   Search,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
@@ -54,7 +56,9 @@ export function AppHeader({
     | "calendar"
     | "search"
     | "workspaces"
-    | "messages";
+    | "messages"
+    | "admin"
+    | "help";
 }) {
   const { user, signOut } = useAuth();
   usePresence();
@@ -110,6 +114,18 @@ export function AppHeader({
               onClick={() => navigate("/messages")}
               icon={<MessageSquare className="size-3.5" />}
               label="Messages"
+            />
+            <NavLink
+              active={active === "admin"}
+              onClick={() => navigate("/admin")}
+              icon={<ShieldCheck className="size-3.5" />}
+              label="Admin"
+            />
+            <NavLink
+              active={active === "help"}
+              onClick={() => navigate("/help")}
+              icon={<CircleHelp className="size-3.5" />}
+              label="Help"
             />
           </nav>
         </div>
@@ -246,8 +262,14 @@ export function AppHeader({
               <DropdownMenuItem onClick={() => navigate("/search")}>
                 <Search className="mr-2 size-4" /> Search workspace
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/admin")}>
+                <ShieldCheck className="mr-2 size-4" /> Org admin
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/settings")}>
                 <Settings className="mr-2 size-4" /> Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/help")}>
+                <CircleHelp className="mr-2 size-4" /> Help center
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>

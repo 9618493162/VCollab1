@@ -27,8 +27,11 @@ import SearchPage from "./pages/Search";
 import Workspaces from "./pages/Workspaces";
 import WorkspaceDetail from "./pages/WorkspaceDetail";
 import Messages from "./pages/Messages";
+import Help from "./pages/Help";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import { CommandPalette } from "./components/CommandPalette";
+import { OnboardingWizard } from "./components/OnboardingWizard";
 
 /** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
  *  crashing the whole app (e.g. hook errors in WebContainer environment). */
@@ -207,6 +210,22 @@ createRoot(document.getElementById("root")!).render(
                   </RequireAuth>
                 }
               />
+              <Route
+                path="/help"
+                element={
+                  <RequireAuth>
+                    <Help />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <RequireAuth>
+                    <Admin />
+                  </RequireAuth>
+                }
+              />
               {/* Public on purpose: anyone with a link can join a call — no
                   account needed on their side. Starting meetings stays gated
                   behind /dashboard's RequireAuth. */}
@@ -214,6 +233,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CommandPalette />
+            <OnboardingWizard />
           </BrowserRouter>
           <Toaster />
         </ThemeProvider>
