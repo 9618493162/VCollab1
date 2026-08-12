@@ -60,6 +60,23 @@ const schema = defineSchema(
       lastSeen: v.number(), // heartbeat, used to expire stale rows
       sharing: v.optional(v.boolean()), // currently screen-sharing
       handRaised: v.optional(v.boolean()),
+      waiting: v.optional(v.boolean()), // held in the waiting room (Phase 61)
+      userId: v.optional(v.id("users")), // signed-in account behind this client
+    }).index("by_code", ["code"]),
+
+    // per-meeting security + moderation settings (Phase 61): waiting room,
+    // participant permissions, and co-host clientIds
+    meetingSettings: defineTable({
+      code: v.string(),
+      waitingRoom: v.boolean(),
+      allowMic: v.boolean(),
+      allowCam: v.boolean(),
+      allowShare: v.boolean(),
+      allowChat: v.boolean(),
+      allowReactions: v.boolean(),
+      coHosts: v.array(v.string()), // clientIds with host-like moderation powers
+      updatedBy: v.id("users"),
+      updatedAt: v.number(),
     }).index("by_code", ["code"]),
 
     // WebRTC signaling relay: offers, answers, ICE candidates, hello/bye

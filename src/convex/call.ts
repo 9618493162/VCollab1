@@ -1,7 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import { mutation, MutationCtx, query, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { normalizeCode } from "./rooms";
 import { createNotification } from "./notifications";
 import { usersByEmails } from "./meetings";
@@ -22,14 +23,49 @@ async function findPresence(
     .first();
 }
 
+async function findPresenceByUser(ctx: QueryCtx, code: string, userId: Id<"users">) {
+  const rows = await ctx.db
+    .query("presence")
+    .withIndex("by_code", (q) => q.eq("code", code))
+    .collect();
+  return rows.find((r) => r.userId === userId) ?? null;
+}
+
+async function getMeetingSettings(ctx: QueryCtx | MutationCtx, code: string) {
+  return await ctx.db
+    .query("meetingSettings")
+    .withIndex("by_code", (q) => q.eq("code", code))
+    .first();
+}
+
+/** Host, or a co-host whose client is currently in the room. */
+async function canModerate(
+  ctx: QueryCtx | MutationCtx,
+  code: string,
+  userId: Id<"users">,
+) {
+  const room = await ctx.db
+    .query("rooms")
+    .withIndex("by_code", (q) => q.eq("code", code))
+    .first();
+  if (room?.createdBy === userId) return true;
+  const settings = await getMeetingSettings(ctx, code);
+  if (settings) {
+    const mine = await findPresenceByUser(ctx, code, userId);
+    if (mine && settings.coHosts.includes(mine.clientId)) return true;
+  }
+  return false;
+}
+
 /** Join a meeting: register presence and broadcast a hello so peers connect. */
 export const joinRoom = mutation({
   args: {
     code: v.string(),
     clientId: v.string(),
     name: v.string(),
+    userId: v.optional(v.id("users")),
   },
-  handler: async (ctx, { code, clientId, name }) => {
+  handler: async (ctx, { code, clientId, name, userId }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
     const room = await ctx.db
@@ -39,6 +75,10 @@ export const joinRoom = mutation({
     if (room === null) throw new Error("This meeting doesn't exist yet.");
     if (room.locked === true) throw new Error("This meeting is locked by the host.");
     if (room.status === "ended") throw new Error("This meeting has ended.");
+
+    // waiting room: hold everyone except the host until they're admitted
+    const settings = await getMeetingSettings(ctx, normalized);
+    const waiting = settings?.waitingRoom === true && room.createdBy !== userId;
 
     const cleanName = name.trim().slice(0, 40) || "Guest";
     const now = Date.now();
@@ -84,7 +124,12 @@ export const joinRoom = mutation({
       joinedAt: now,
       lastSeen: now,
       sharing: false,
+      waiting,
+      userId,
     });
+
+    // people waiting don't join the mesh yet
+    if (waiting) return { waiting: true, participants: [] };
 
     // announce ourselves so existing participants open a connection to us
     await ctx.db.insert("signals", {
@@ -101,14 +146,17 @@ export const joinRoom = mutation({
       .query("presence")
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .collect();
-    return others
-      .filter((p) => p.clientId !== clientId)
-      .map((p) => ({
-        clientId: p.clientId,
-        name: p.name,
-        sharing: p.sharing === true,
-        handRaised: p.handRaised === true,
-      }));
+    return {
+      waiting: false,
+      participants: others
+        .filter((p) => p.clientId !== clientId && p.waiting !== true)
+        .map((p) => ({
+          clientId: p.clientId,
+          name: p.name,
+          sharing: p.sharing === true,
+          handRaised: p.handRaised === true,
+        })),
+    };
   },
 });
 
@@ -142,7 +190,20 @@ export const setSharing = mutation({
     const normalized = normalizeCode(code);
     if (normalized === "") return;
     const row = await findPresence(ctx, normalized, clientId);
-    if (row) await ctx.db.patch(row._id, { sharing });
+    if (row === null) return;
+    if (sharing === true) {
+      const settings = await getMeetingSettings(ctx, normalized);
+      if (settings?.allowShare === false) {
+        const userId = await getAuthUserId(ctx);
+        const room = await ctx.db
+          .query("rooms")
+          .withIndex("by_code", (q) => q.eq("code", normalized))
+          .first();
+        if (userId === null || room?.createdBy !== userId)
+          throw new Error("Screen sharing is disabled by the host.");
+      }
+    }
+    await ctx.db.patch(row._id, { sharing });
   },
 });
 
@@ -170,6 +231,16 @@ export const sendReaction = mutation({
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
     const pres = await findPresence(ctx, normalized, clientId);
     if (pres === null) throw new Error("You're not in this meeting.");
+    const settings = await getMeetingSettings(ctx, normalized);
+    if (settings?.allowReactions === false) {
+      const room = await ctx.db
+        .query("rooms")
+        .withIndex("by_code", (q) => q.eq("code", normalized))
+        .first();
+      const hostRow = room ? await findPresenceByUser(ctx, normalized, room.createdBy) : null;
+      if (hostRow?.clientId !== clientId)
+        throw new Error("Reactions are disabled by the host.");
+    }
     await ctx.db.insert("reactions", {
       code: normalized,
       emoji: emoji.slice(0, 8),
@@ -264,7 +335,7 @@ export const listSignals = query({
   },
 });
 
-/** Who's currently in the meeting (heartbeats within the TTL). */
+/** Who's in the meeting (heartbeats within the TTL; waiting people excluded). */
 export const listParticipants = query({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
@@ -276,12 +347,14 @@ export const listParticipants = query({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .collect();
     return rows
-      .filter((p) => p.lastSeen >= cutoff)
+      .filter((p) => p.lastSeen >= cutoff && p.waiting !== true)
       .map((p) => ({
         clientId: p.clientId,
         name: p.name,
         sharing: p.sharing === true,
         handRaised: p.handRaised === true,
+        waiting: p.waiting === true,
+        userId: p.userId,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
@@ -299,8 +372,8 @@ export const kickParticipant = mutation({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
     if (room === null) throw new Error("Meeting not found.");
-    if (room.createdBy !== userId)
-      throw new Error("Only the host can remove participants.");
+    if (!(await canModerate(ctx, normalized, userId)))
+      throw new Error("Only the host or a co-host can remove participants.");
     const row = await findPresence(ctx, normalized, target);
     if (row) await ctx.db.delete(row._id);
     await ctx.db.insert("signals", {
@@ -326,8 +399,8 @@ export const muteParticipant = mutation({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
     if (room === null) throw new Error("Meeting not found.");
-    if (room.createdBy !== userId)
-      throw new Error("Only the host can mute participants.");
+    if (!(await canModerate(ctx, normalized, userId)))
+      throw new Error("Only the host or a co-host can mute participants.");
     await ctx.db.insert("signals", {
       code: normalized,
       from: userId,
@@ -391,6 +464,16 @@ export const sendMessage = mutation({
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
     const clean = text.trim().slice(0, 500);
     if (clean === "") throw new Error("Message can't be empty.");
+    const settings = await getMeetingSettings(ctx, normalized);
+    if (settings?.allowChat === false) {
+      const room = await ctx.db
+        .query("rooms")
+        .withIndex("by_code", (q) => q.eq("code", normalized))
+        .first();
+      const hostRow = room ? await findPresenceByUser(ctx, normalized, room.createdBy) : null;
+      if (hostRow?.clientId !== from)
+        throw new Error("Chat is disabled by the host.");
+    }
     await ctx.db.insert("messages", {
       code: normalized,
       from,

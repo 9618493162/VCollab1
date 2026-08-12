@@ -6,11 +6,19 @@ import { Input } from "@/components/ui/input";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  BadgeCheck,
+  Ban,
   BarChart3,
+  Bot,
   Captions,
   Check,
+  CheckCheck,
+  ClipboardList,
   Copy,
+  Crown,
+  DoorOpen,
   Hand,
+  Info,
   Keyboard,
   Languages,
   LayoutGrid,
@@ -31,14 +39,22 @@ import {
   PictureInPicture2,
   Radio,
   Send,
+  Settings2,
+  Shield,
   Signal,
   Sparkles,
   Square,
+  UserPlus,
   Users,
   Video,
   VideoOff,
   X,
 } from "lucide-react";
+import { AIPanel } from "@/components/AIPanel";
+import { DeviceSettingsPanel } from "@/components/DeviceSettingsPanel";
+import { MeetingInfoModal } from "@/components/MeetingInfoModal";
+import { NotesTasksPanel } from "@/components/NotesTasksPanel";
+import { SecurityPanel } from "@/components/SecurityPanel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -138,9 +154,23 @@ export default function Call() {
   );
   const [entered, setEntered] = useState(false);
   const [panel, setPanel] = useState<
-    "none" | "chat" | "people" | "polls" | "qa" | "agenda" | "breakouts" | "whiteboard"
+    | "none"
+    | "chat"
+    | "people"
+    | "polls"
+    | "qa"
+    | "agenda"
+    | "breakouts"
+    | "whiteboard"
+    | "devices"
+    | "notes"
+    | "ai"
   >("none");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<"gallery" | "speaker" | "focus">("gallery");
   const [showReactions, setShowReactions] = useState(false);
@@ -154,6 +184,17 @@ export default function Call() {
   const call = useCallRoom(code, displayName);
   const lockMeeting = useMutation(api.meetings.lockMeeting);
   const endMeeting = useMutation(api.meetings.endMeeting);
+
+  const meetingSettings = useQuery(api.security.getMeetingSettings, code ? { code } : "skip");
+  const waitingList = useQuery(api.security.listWaitingParticipants, code ? { code } : "skip");
+  const renameRoom = useMutation(api.rooms.renameRoom);
+  const admitParticipant = useMutation(api.security.admitParticipant);
+  const admitAllWaiting = useMutation(api.security.admitAllWaiting);
+  const rejectParticipant = useMutation(api.security.rejectParticipant);
+  const makeCoHost = useMutation(api.security.makeCoHost);
+  const muteAll = useMutation(api.security.muteAll);
+  const isCoHost = meetingSettings?.coHosts?.includes(call.clientId) === true;
+  const isModerator = isHost === true || isCoHost;
 
   const settings = useQuery(api.settings.getSettings);
   const preJoinTouched = useRef(false);
@@ -296,7 +337,28 @@ export default function Call() {
     }
   };
 
-  // meeting keyboard shortcuts (M/C/S/R/H/P/?). Ignored while typing.
+  const handleRename = async () => {
+    const title = titleDraft.trim();
+    setEditingTitle(false);
+    if (!title) return;
+    try {
+      await renameRoom({ code, title });
+      toast.success("Meeting renamed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't rename the meeting.");
+    }
+  };
+
+  const handleMuteAll = async () => {
+    try {
+      await muteAll({ code, clientId: call.clientId });
+      toast.success("Everyone muted.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't mute everyone.");
+    }
+  };
+
+  // meeting keyboard shortcuts (M/C/S/R/H/P/T/A/?). Ignored while typing.
   useEffect(() => {
     if (!entered) return;
     const onKey = (event: KeyboardEvent) => {
@@ -328,6 +390,12 @@ export default function Call() {
       } else if (key === "p") {
         event.preventDefault();
         setPanel((p) => (p === "people" ? "none" : "people"));
+      } else if (key === "t") {
+        event.preventDefault();
+        setPanel((p) => (p === "chat" ? "none" : "chat"));
+      } else if (key === "a") {
+        event.preventDefault();
+        setPanel((p) => (p === "ai" ? "none" : "ai"));
       } else if (key === "?") {
         event.preventDefault();
         setShowShortcuts((v) => !v);
@@ -393,11 +461,40 @@ export default function Call() {
       <div className="pointer-events-none absolute -top-40 left-1/4 size-[500px] rounded-full bg-indigo-600/20 blur-[120px]" />
       <div className="pointer-events-none absolute -bottom-40 right-1/4 size-[400px] rounded-full bg-fuchsia-600/10 blur-[120px]" />
 
-      {entered && (
+      {/* ---------- waiting room ---------- */}
+      {call.waiting && (
+        <div className="relative z-10 flex h-full flex-col items-center justify-center gap-5 p-6 text-center">
+          <div className="flex size-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+            <DoorOpen className="size-7 text-neutral-300" />
+          </div>
+          <div>
+            <p className="font-display text-xl font-semibold">You're in the waiting room</p>
+            <p className="mt-1.5 max-w-sm text-sm text-neutral-400">
+              The host will let you into <span className="font-mono text-neutral-300">{code}</span>{" "}
+              shortly. Keep your mic and camera ready.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />
+            <span className="size-1.5 animate-pulse rounded-full bg-amber-400 [animation-delay:150ms]" />
+            <span className="size-1.5 animate-pulse rounded-full bg-amber-400 [animation-delay:300ms]" />
+            <span className="ml-2 text-xs text-neutral-500">Waiting for the host…</span>
+          </div>
+          <Button
+            variant="outline"
+            className="mt-2 border-white/10 text-white hover:bg-white/10"
+            onClick={() => void handleLeave()}
+          >
+            Leave waiting room
+          </Button>
+        </div>
+      )}
+
+      {!call.waiting && entered && (
         <>
           {/* ---------- top bar ---------- */}
           <header className="relative z-10 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 backdrop-blur-md sm:px-6">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
                 onClick={() => navigate("/")}
@@ -405,11 +502,94 @@ export default function Call() {
               >
                 V<span className="text-gradient">Collab</span>
               </button>
+              <span className="hidden size-1 rounded-full bg-emerald-400 sm:block" />
+              <span className="hidden text-xs font-medium text-emerald-400 sm:block">Live</span>
+
+              {editingTitle && isModerator ? (
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleRename();
+                  }}
+                >
+                  <Input
+                    autoFocus
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onBlur={() => void handleRename()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setEditingTitle(false);
+                        setTitleDraft(room?.title ?? "");
+                      }
+                    }}
+                    placeholder="Meeting title"
+                    className="h-8 w-52 rounded-lg border-white/10 bg-white/10 text-sm text-white"
+                    aria-label="Meeting title"
+                  />
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isModerator) return;
+                    setTitleDraft(room?.title ?? "");
+                    setEditingTitle(true);
+                  }}
+                  title={isModerator ? "Rename meeting" : room?.title ?? "Untitled meeting"}
+                  aria-label={isModerator ? "Rename meeting" : "Meeting title"}
+                  className="hidden max-w-[220px] truncate text-sm font-medium text-neutral-200 transition-colors sm:block sm:hover:text-white md:max-w-xs"
+                >
+                  {room?.title || "Untitled meeting"}
+                </button>
+              )}
               <span className="hidden text-xs tabular-nums text-neutral-400 sm:block">
                 {elapsed}
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {/* recording status */}
+              {call.recording && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    call.recording ? call.stopRecording() : void call.startRecording()
+                  }
+                  title="Recording in progress — click to stop"
+                  aria-label="Stop recording"
+                  className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/25"
+                >
+                  <span className="size-1.5 animate-pulse rounded-full bg-red-400" />
+                  REC {elapsed}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowSecurity(true)}
+                title="Security"
+                aria-label="Security settings"
+                className={cn(
+                  "hidden size-8 items-center justify-center rounded-full transition-colors md:flex",
+                  meetingSettings?.waitingRoom || room?.locked
+                    ? "text-amber-300 hover:bg-white/10"
+                    : "text-neutral-400 hover:bg-white/5 hover:text-white",
+                )}
+              >
+                <Shield className="size-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowInfo(true)}
+                title="Meeting information"
+                aria-label="Meeting information"
+                className="hidden size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/5 hover:text-white md:flex"
+              >
+                <Info className="size-4" />
+              </button>
+
               {/* view mode toggle */}
               <div className="hidden items-center rounded-full border border-white/10 bg-white/5 p-0.5 md:flex">
                 {(
@@ -455,7 +635,29 @@ export default function Call() {
                     <MoreVertical className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem onClick={() => setShowInfo(true)}>
+                    <Info className="mr-2 size-4" /> Meeting info
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowSecurity(true)}>
+                    <Shield className="mr-2 size-4" /> Security
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "devices" ? "none" : "devices"))}
+                  >
+                    <Settings2 className="mr-2 size-4" /> Device settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "ai" ? "none" : "ai"))}
+                  >
+                    <Bot className="mr-2 size-4" /> AI assistant
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "notes" ? "none" : "notes"))}
+                  >
+                    <ClipboardList className="mr-2 size-4" /> Notes & tasks
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => setPanel((p) => (p === "polls" ? "none" : "polls"))}
                   >
@@ -531,6 +733,7 @@ export default function Call() {
                 speaking={call.speaking[activeSpeakerId]}
                 quality={call.quality[activeSpeakerId]}
                 presenting={call.participants?.find((p) => p.clientId === activeSpeakerId)?.sharing}
+                handRaised={call.participants?.find((p) => p.clientId === activeSpeakerId)?.handRaised}
               />
             ) : (
               <div
@@ -567,6 +770,7 @@ export default function Call() {
                         speaking={call.speaking[peerId]}
                         quality={call.quality[peerId]}
                         presenting={call.participants?.find((p) => p.clientId === peerId)?.sharing}
+                        handRaised={call.participants?.find((p) => p.clientId === peerId)?.handRaised}
                       />
                     </div>
                   );
@@ -588,6 +792,11 @@ export default function Call() {
                       <span className="absolute bottom-2.5 left-3 rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
                         {p.name} · joining…
                       </span>
+                      {p.handRaised && (
+                        <span className="absolute right-2.5 top-2.5 flex size-6 items-center justify-center rounded-full bg-amber-400 text-sm shadow-lg">
+                          ✋
+                        </span>
+                      )}
                     </div>
                   ))}
 
@@ -836,6 +1045,16 @@ export default function Call() {
             </ControlButton>
 
             <ControlButton
+              active={panel === "ai"}
+              activeClass="bg-white text-black"
+              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              onClick={() => setPanel((p) => (p === "ai" ? "none" : "ai"))}
+              label="AI assistant"
+            >
+              <Bot className="size-5" />
+            </ControlButton>
+
+            <ControlButton
               active={panel === "chat"}
               activeClass="bg-white text-black"
               inactiveClass="bg-white/10 text-white hover:bg-white/20"
@@ -890,8 +1109,27 @@ export default function Call() {
               code={code}
               call={call}
               isHost={isHost === true}
+              isCoHost={isCoHost}
+              coHosts={meetingSettings?.coHosts}
+              waitingList={waitingList}
+              onAdmit={(clientId) => void admitParticipant({ code, clientId })}
+              onAdmitAll={() => void admitAllWaiting({ code })}
+              onReject={(clientId) => void rejectParticipant({ code, clientId })}
+              onMakeCoHost={(clientId) =>
+                void makeCoHost({ code, clientId }).catch((error) =>
+                  toast.error(error instanceof Error ? error.message : "Couldn't update co-host."),
+                )
+              }
+              onMuteAll={() => void handleMuteAll()}
               onClose={() => setPanel("none")}
             />
+          )}
+          {panel === "devices" && <DeviceSettingsPanel call={call} onClose={() => setPanel("none")} />}
+          {panel === "notes" && (
+            <NotesTasksPanel code={code} onClose={() => setPanel("none")} />
+          )}
+          {panel === "ai" && (
+            <AIPanel code={code} call={call} onClose={() => setPanel("none")} />
           )}
           {panel === "polls" && (
             <PollsPanel
@@ -937,6 +1175,26 @@ export default function Call() {
         </>
       )}
 
+      {/* ---------- meeting info + security modals ---------- */}
+      <MeetingInfoModal
+        open={showInfo}
+        onOpenChange={setShowInfo}
+        code={code}
+        title={room?.title}
+        hostName={room?.hostName}
+        startedAt={call.joinedAt ?? undefined}
+        participantCount={participantCount}
+        durationLabel={elapsed}
+      />
+      {showSecurity && (
+        <SecurityPanel
+          code={code}
+          isHost={isHost === true}
+          isCoHost={isCoHost}
+          onClose={() => setShowSecurity(false)}
+        />
+      )}
+
       {/* ---------- keyboard shortcuts help ---------- */}
       {showShortcuts && (
         <div
@@ -966,6 +1224,8 @@ export default function Call() {
                 ["R", "Open reactions"],
                 ["H", "Raise / lower hand"],
                 ["P", "People panel"],
+                ["T", "Chat"],
+                ["A", "AI assistant"],
                 ["?", "Show this help"],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between text-xs">
@@ -1142,6 +1402,7 @@ function Tile({
   speaking,
   quality,
   presenting,
+  handRaised,
 }: {
   peerId: string;
   stream: MediaStream;
@@ -1150,6 +1411,7 @@ function Tile({
   speaking?: boolean;
   quality?: PeerQuality;
   presenting?: boolean;
+  handRaised?: boolean;
 }) {
   const camOff = trackState ? !trackState.video : false;
   const micOff = trackState ? !trackState.audio : false;
@@ -1183,6 +1445,14 @@ function Tile({
       </div>
       <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
         <QualityDot quality={quality} />
+        {handRaised && (
+          <span
+            className="flex size-6 items-center justify-center rounded-full bg-amber-400 text-sm shadow-lg"
+            title="Hand raised"
+          >
+            ✋
+          </span>
+        )}
         {speaking && (
           <span className="flex items-center gap-1 rounded-full bg-primary/80 px-2 py-0.5 text-[10px] font-medium text-white">
             <Signal className="size-2.5" /> speaking
@@ -1310,17 +1580,35 @@ function PeoplePanel({
   code,
   call,
   isHost,
+  isCoHost,
+  coHosts,
+  waitingList,
+  onAdmit,
+  onAdmitAll,
+  onReject,
+  onMakeCoHost,
+  onMuteAll,
   onClose,
 }: {
   code: string;
   call: ReturnType<typeof useCallRoom>;
   isHost: boolean;
+  isCoHost: boolean;
+  coHosts?: string[];
+  waitingList?: { clientId: string; name: string; joinedAt: number }[];
+  onAdmit: (clientId: string) => void;
+  onAdmitAll: () => void;
+  onReject: (clientId: string) => void;
+  onMakeCoHost: (clientId: string) => void;
+  onMuteAll: () => void;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
   const kick = useMutation(api.call.kickParticipant);
   const mute = useMutation(api.call.muteParticipant);
   const lowered = useMutation(api.call.setHandRaised);
+  const isModerator = isHost || isCoHost;
+  const coHostIds = useMemo(() => new Set(coHosts ?? []), [coHosts]);
 
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1337,14 +1625,27 @@ function PeoplePanel({
             {call.participants?.length ?? 0}
           </span>
         </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
-          aria-label="Close people panel"
-        >
-          <X className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {isModerator && (call.participants?.length ?? 0) > 1 && (
+            <button
+              type="button"
+              onClick={onMuteAll}
+              title="Mute everyone"
+              aria-label="Mute everyone"
+              className="flex size-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <MicOff className="size-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-neutral-400 transition-colors hover:text-white"
+            aria-label="Close people panel"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       </div>
 
       <div className="border-b border-white/10 p-3">
@@ -1355,6 +1656,63 @@ function PeoplePanel({
           className="h-9 rounded-full border-white/10 bg-white/5 text-sm text-white placeholder:text-neutral-500"
         />
       </div>
+
+      {isModerator && waitingList !== undefined && waitingList.length > 0 && (
+        <div className="border-b border-amber-400/20 bg-amber-400/5 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-300">
+              <DoorOpen className="size-3.5" /> Waiting room · {waitingList.length}
+            </p>
+            <button
+              type="button"
+              onClick={onAdmitAll}
+              className="flex items-center gap-1 text-[11px] text-amber-300 transition-colors hover:text-amber-200"
+            >
+              <CheckCheck className="size-3" /> Admit all
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {waitingList.map((w) => (
+              <div
+                key={w.clientId}
+                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5"
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
+                  {(w.name[0] ?? "?").toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs text-white">{w.name}</p>
+                  <p className="text-[10px] text-neutral-500">
+                    Waiting since{" "}
+                    {new Date(w.joinedAt).toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAdmit(w.clientId)}
+                  title="Admit"
+                  aria-label={`Admit ${w.name}`}
+                  className="flex size-7 items-center justify-center rounded-full text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                >
+                  <Check className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onReject(w.clientId)}
+                  title="Reject"
+                  aria-label={`Reject ${w.name}`}
+                  className="flex size-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                >
+                  <Ban className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-2">
         {list.length === 0 && (
@@ -1385,9 +1743,25 @@ function PeoplePanel({
                 {(p.name[0] ?? "?").toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">
-                  {p.name}
-                  {self && <span className="ml-1.5 text-xs text-neutral-500">(you)</span>}
+                <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
+                  <span className="truncate">{p.name}</span>
+                  {self && <span className="shrink-0 text-xs text-neutral-500">(you)</span>}
+                  {isHost && self && (
+                    <span
+                      className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-400/15 px-1.5 py-px text-[9px] font-medium text-amber-300"
+                      title="Host"
+                    >
+                      <Crown className="size-2.5" /> host
+                    </span>
+                  )}
+                  {coHostIds.has(p.clientId) && (
+                    <span
+                      className="flex shrink-0 items-center gap-0.5 rounded-full bg-indigo-400/15 px-1.5 py-px text-[9px] font-medium text-indigo-300"
+                      title="Co-host"
+                    >
+                      <BadgeCheck className="size-2.5" /> co-host
+                    </span>
+                  )}
                 </p>
                 <p className="flex items-center gap-1 text-[11px] text-neutral-500">
                   {p.handRaised && (
@@ -1415,7 +1789,18 @@ function PeoplePanel({
               </div>
               <div className="flex items-center gap-1">
                 <QualityDot quality={call.quality[p.clientId]} />
-                {isHost && !self && (
+                {isHost && !self && !coHostIds.has(p.clientId) && (
+                  <button
+                    type="button"
+                    onClick={() => onMakeCoHost(p.clientId, true)}
+                    title="Make co-host"
+                    aria-label="Make co-host"
+                    className="flex size-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"
+                  >
+                    <UserPlus className="size-3.5" />
+                  </button>
+                )}
+                {isModerator && !self && (
                   <>
                     <button
                       type="button"
@@ -1454,10 +1839,12 @@ function PeoplePanel({
         })}
       </div>
 
-      {isHost && (
+      {isModerator && (
         <div className="border-t border-white/10 p-3 text-center">
           <p className="text-[11px] text-neutral-500">
-            You're the host — you can mute or remove anyone.
+            {isHost
+              ? "You're the host — mute, remove, or make co-hosts from this panel."
+              : "You're a co-host — you can mute or remove participants."}
           </p>
         </div>
       )}

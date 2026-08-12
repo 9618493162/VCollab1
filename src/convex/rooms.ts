@@ -56,10 +56,13 @@ export const getRoom = query({
   handler: async (ctx, { code }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") return null;
-    return await ctx.db
+    const room = await ctx.db
       .query("rooms")
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
+    if (room === null) return null;
+    const host = await ctx.db.get(room.createdBy);
+    return { ...room, hostName: host?.name ?? "Host" };
   },
 });
 

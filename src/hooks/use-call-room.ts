@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuth } from "@/hooks/use-auth";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -25,6 +26,8 @@ export type Participant = {
   name: string;
   sharing?: boolean;
   handRaised?: boolean;
+  waiting?: boolean;
+  userId?: Id<"users">;
 };
 
 export type PeerQuality = "good" | "okay" | "poor";
@@ -87,7 +90,10 @@ export function useCallRoom(code: string, name: string) {
   const [handRaised, setHandRaised] = useState(false);
   const [kicked, setKicked] = useState(false);
   const [endedByHost, setEndedByHost] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [remoteTrackStates, setRemoteTrackStates] = useState<Record<string, TrackStates>>({});
+  const { user } = useAuth();
+  const userId = user?._id;
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
   const [quality, setQuality] = useState<Record<string, PeerQuality>>({});
 
@@ -368,6 +374,8 @@ export function useCallRoom(code: string, name: string) {
         recorderRef.current?.stop();
         void leave();
       } else if (sig.kind === "mute") {
+        // mute-all broadcasts to everyone; the sender skips themselves
+        if (payload.from === clientId) return;
         localStreamRef.current?.getAudioTracks().forEach((t) => (t.enabled = false));
         setMicOn(false);
       }
@@ -384,6 +392,41 @@ export function useCallRoom(code: string, name: string) {
       void handleSignal(sig);
     }
   }, [signals, handleSignal]);
+
+  // ---- admitted from the waiting room: join the mesh now ----
+  useEffect(() => {
+    if (!joined || !waiting) return;
+    const me = (participants ?? []).find((p) => p.clientId === clientId);
+    if (!me) return;
+    setWaiting(false);
+    void sendSignal({
+      code,
+      from: clientId,
+      to: "*",
+      kind: "hello",
+      payload: JSON.stringify({ clientId, name }),
+    });
+    for (const other of participants ?? []) {
+      if (other.clientId === clientId) continue;
+      if (clientId < other.clientId) {
+        const pc = ensurePeer(other.clientId);
+        try {
+          void pc.createOffer().then(async (offer) => {
+            await pc.setLocalDescription(offer);
+            await sendSignal({
+              code,
+              from: clientId,
+              to: other.clientId,
+              kind: "offer",
+              payload: JSON.stringify(pc.localDescription),
+            });
+          });
+        } catch {
+          // connection failed; ignore
+        }
+      }
+    }
+  }, [joined, waiting, participants, clientId, code, ensurePeer, name, sendSignal]);
 
   // ---- heartbeat while in the room ----
   useEffect(() => {
@@ -550,17 +593,19 @@ export function useCallRoom(code: string, name: string) {
   const join = useCallback(async () => {
     if (joinedRef.current) return;
     try {
-      const others = await joinRoom({ code, clientId, name });
+      const res = await joinRoom({ code, clientId, name, userId });
       joinedRef.current = true;
       setJoined(true);
       setJoinedAt(Date.now());
       setJoinError(null);
+      setWaiting(res.waiting);
+      if (res.waiting) return;
 
       const nameMap: Record<string, string> = { [clientId]: name };
-      for (const other of others) nameMap[other.clientId] = other.name;
+      for (const other of res.participants) nameMap[other.clientId] = other.name;
       setNames(nameMap);
 
-      for (const other of others) {
+      for (const other of res.participants) {
         if (clientId < other.clientId) {
           const pc = ensurePeer(other.clientId);
           try {
@@ -581,7 +626,7 @@ export function useCallRoom(code: string, name: string) {
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : "Couldn't join the meeting.");
     }
-  }, [clientId, code, ensurePeer, joinRoom, name, sendSignal]);
+  }, [clientId, code, ensurePeer, joinRoom, name, sendSignal, userId]);
 
   const toggleMic = useCallback(() => {
     const next = !micOn;
@@ -594,6 +639,36 @@ export function useCallRoom(code: string, name: string) {
     localStream?.getVideoTracks().forEach((t) => (t.enabled = next));
     setCamOn(next);
   }, [localStream, camOn]);
+
+  /** Switch microphone / camera devices and push the new tracks to every peer. */
+  const setDevices = useCallback((devices: { audio?: string; video?: string }) => {
+    const constraints: MediaStreamConstraints = {
+      audio: devices.audio ? { deviceId: { exact: devices.audio } } : true,
+      video: devices.video
+        ? { deviceId: { exact: devices.video } }
+        : { width: 1280, height: 720 },
+    };
+    navigator.mediaDevices
+      .getUserMedia(constraints)
+      .then((stream) => {
+        const current = localStreamRef.current ?? new MediaStream();
+        localStreamRef.current = current;
+        const replacements: { kind: "audio" | "video"; track: MediaStreamTrack }[] = [];
+        for (const track of stream.getTracks()) {
+          current.getTracks().filter((t) => t.kind === track.kind).forEach((t) => t.stop());
+          current.addTrack(track);
+          replacements.push({ kind: track.kind as "audio" | "video", track });
+        }
+        setLocalStream(current);
+        for (const pc of pcRef.current.values()) {
+          for (const { kind, track } of replacements) {
+            const sender = pc.getSenders().find((s) => s.track?.kind === kind);
+            void sender?.replaceTrack(track);
+          }
+        }
+      })
+      .catch(() => setMediaError("Couldn't switch to the selected device."));
+  }, []);
 
   const toggleHand = useCallback(() => {
     const next = !handRaisedRef.current;
@@ -731,6 +806,7 @@ export function useCallRoom(code: string, name: string) {
   return {
     clientId,
     joined,
+    waiting,
     join,
     joinError,
     leave,
@@ -741,6 +817,7 @@ export function useCallRoom(code: string, name: string) {
     mediaError,
     toggleMic,
     toggleCam,
+    setDevices,
     sharing,
     shareStream,
     toggleShare,
