@@ -48,6 +48,7 @@ import {
 import { PollsPanel } from "@/components/PollsPanel";
 import { QAPanel } from "@/components/QAPanel";
 import { AgendaPanel } from "@/components/AgendaPanel";
+import { BreakoutsPanel } from "@/components/BreakoutsPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { cn } from "@/lib/utils";
@@ -135,7 +136,7 @@ export default function Call() {
   );
   const [entered, setEntered] = useState(false);
   const [panel, setPanel] = useState<
-    "none" | "chat" | "people" | "polls" | "qa" | "agenda"
+    "none" | "chat" | "people" | "polls" | "qa" | "agenda" | "breakouts"
   >("none");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -467,6 +468,11 @@ export default function Call() {
                     onClick={() => setPanel((p) => (p === "agenda" ? "none" : "agenda"))}
                   >
                     <ListChecks className="mr-2 size-4" /> Agenda
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "breakouts" ? "none" : "breakouts"))}
+                  >
+                    <Users className="mr-2 size-4" /> Breakout rooms
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShowShortcuts(true)}>
@@ -900,6 +906,15 @@ export default function Call() {
             <AgendaPanel
               code={code}
               isHost={isHost === true}
+              onClose={() => setPanel("none")}
+            />
+          )}
+          {panel === "breakouts" && (
+            <BreakoutsPanel
+              code={code}
+              isHost={isHost === true}
+              clientId={call.clientId}
+              name={call.participants?.find((p) => p.clientId === call.clientId)?.name ?? displayName}
               onClose={() => setPanel("none")}
             />
           )}

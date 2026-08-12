@@ -348,6 +348,45 @@ const schema = defineSchema(
       readBy: v.array(v.id("users")),
     }).index("by_thread", ["threadId"]),
 
+    // --- In-call breakout rooms (Phase 55) ---
+
+    // one breakout session per meeting; the host starts/ends it and sets a timer
+    breakoutSessions: defineTable({
+      code: v.string(),
+      status: v.union(v.literal("active"), v.literal("ended")),
+      timerEndsAt: v.optional(v.number()),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
+
+    // rooms inside a breakout session (e.g. "Room 1", "Design")
+    breakoutRooms: defineTable({
+      code: v.string(),
+      name: v.string(),
+      createdBy: v.id("users"),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
+
+    // who is assigned to which breakout room, keyed by call clientId
+    breakoutMembers: defineTable({
+      code: v.string(),
+      roomId: v.id("breakoutRooms"),
+      clientId: v.string(),
+      name: v.string(),
+      joinedAt: v.number(),
+    })
+      .index("by_code", ["code"])
+      .index("by_room", ["roomId"]),
+
+    // messages inside a breakout room (host can broadcast to any room)
+    breakoutMessages: defineTable({
+      roomId: v.id("breakoutRooms"),
+      from: v.string(), // clientId
+      name: v.string(),
+      text: v.string(),
+      createdAt: v.number(),
+    }).index("by_room", ["roomId"]),
+
     // user status presence (distinct from in-call `presence`)
     userPresence: defineTable({
       userId: v.id("users"),
