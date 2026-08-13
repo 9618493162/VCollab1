@@ -628,7 +628,25 @@ export function useCallRoom(code: string, name: string) {
         }
       }
     } catch (error) {
-      setJoinError(error instanceof Error ? error.message : "Couldn't join the meeting.");
+      const raw = error instanceof Error ? error.message : "";
+      const lower = raw.toLowerCase();
+      let message = "Couldn't join the meeting.";
+      if (/doesn't look right|not found|doesn't exist/i.test(raw)) {
+        message = "This meeting doesn't exist. Check the code and try again.";
+      } else if (/locked/i.test(raw)) {
+        message = "This meeting is locked by the host.";
+      } else if (/ended/i.test(raw)) {
+        message = "This meeting has ended.";
+      } else if (
+        /network|fetch|connection|unavailable|failed to connect|timed out/i.test(
+          lower,
+        )
+      ) {
+        message = "Unable to connect. Check your connection and try again.";
+      } else if (raw) {
+        message = raw;
+      }
+      setJoinError(message);
     }
   }, [clientId, code, ensurePeer, joinRoom, name, sendSignal, userId]);
 

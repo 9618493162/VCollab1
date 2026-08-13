@@ -23,6 +23,7 @@ import {
   Languages,
   LayoutGrid,
   ListChecks,
+  Loader2,
   Lock,
   LockOpen,
   LogOut,
@@ -38,6 +39,7 @@ import {
   PhoneOff,
   PictureInPicture2,
   Radio,
+  RefreshCw,
   Send,
   Settings2,
   Shield,
@@ -723,6 +725,36 @@ export default function Call() {
                 >
                   Back to meetings
                 </Button>
+              </div>
+            ) : entered && !call.joined && !call.waiting ? (
+              <div className="flex h-full flex-col items-center justify-center text-center">
+                {call.joinError ? (
+                  <>
+                    <p className="max-w-sm text-sm text-red-300">{call.joinError}</p>
+                    <div className="mt-6 flex flex-col items-center gap-2 sm:flex-row">
+                      <Button
+                        onClick={() => void call.join()}
+                        className="h-11 rounded-full px-7 btn-glow"
+                      >
+                        <RefreshCw className="mr-2 size-4" /> Try again
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-11 rounded-full border-white/20 px-7 text-white hover:bg-white/5"
+                        onClick={() => void handleLeave()}
+                      >
+                        Leave
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="size-6 animate-spin text-neutral-400" />
+                    <p className="mt-3 text-sm text-neutral-400">
+                      Connecting to meeting…
+                    </p>
+                  </>
+                )}
               </div>
             ) : view === "focus" && activeSpeakerId ? (
               <Tile
