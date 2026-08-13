@@ -17,8 +17,8 @@ import {
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/use-auth";
-import { useConvex } from "convex/react";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { useConvex, useMutation } from "convex/react";
+import { ArrowRight, Loader2, Mail, User, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -66,11 +66,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const mode: "signin" | "register" =
     searchParams.get("mode") === "register" ? "register" : "signin";
   const convex = useConvex();
-  const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
+  const updateProfile = useMutation(api.settings.updateProfile);
+  const [step, setStep] = useState<"signIn" | { email: string; name?: string }>(
+    "signIn",
+  );
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [emailExists, setEmailExists] = useState<boolean | null>(null);
 
   // Duplicate-account protection (register mode): debounce a real backend
@@ -125,12 +129,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setError("An account with this email already exists. Please sign in instead.");
       return;
     }
+    if (mode === "register" && name.trim().length < 2) {
+      setError("Please enter your full name.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
-      setStep({ email: formData.get("email") as string });
+      setStep({
+        email: formData.get("email") as string,
+        name: mode === "register" ? name.trim() : undefined,
+      });
       setIsLoading(false);
     } catch (error) {
       console.error("Email sign-in error:", error);
@@ -148,6 +159,18 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     try {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
+      // Email-OTP doesn't forward custom profile fields (convex-auth#166), so
+      // persist the name captured during registration with the real profile
+      // mutation. A failure here doesn't block sign-in — the onboarding
+      // wizard collects the name later if needed.
+      const pendingName = typeof step === "string" ? undefined : step.name;
+      if (pendingName) {
+        try {
+          await updateProfile({ name: pendingName });
+        } catch (error) {
+          console.warn("Couldn't save name after sign-in:", error);
+        }
+      }
       navigate(redirect);
     } catch (error) {
       console.error("OTP verification error:", error);
@@ -197,12 +220,30 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </CardTitle>
                   <CardDescription>
                     {mode === "register"
-                      ? "Enter your email and we'll send a code to get you started"
+                      ? "Enter your name and email and we'll send a code to get you started"
                       : "Sign in to continue to VCollab — we'll send a sign-in code"}
                   </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleEmailSubmit}>
                   <CardContent>
+                    {mode === "register" && (
+                      <div className="relative mb-2">
+                        <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          name="name"
+                          placeholder="Full name"
+                          type="text"
+                          autoComplete="name"
+                          className="h-11 rounded-xl pl-9"
+                          disabled={isLoading}
+                          required
+                          minLength={2}
+                          maxLength={60}
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
+                      </div>
+                    )}
                     <div className="relative flex items-center gap-2">
                       <div className="relative flex-1">
                         <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -221,6 +262,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         type="submit"
                         variant="outline"
                         size="icon"
+                        aria-label="Continue"
                         className="h-11 w-11 rounded-xl"
                         disabled={isLoading || (mode === "register" && emailExists === true)}
                       >
@@ -284,6 +326,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <form onSubmit={handleOtpSubmit}>
                   <CardContent>
                     <input type="hidden" name="email" value={step.email} />
+                    <input type="hidden" name="name" value={step.name ?? ""} />
                     <input type="hidden" name="code" value={otp} />
 
                     <div className="flex justify-center">
