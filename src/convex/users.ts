@@ -34,6 +34,25 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
 };
 
 /**
+ * Whether a registered (non-anonymous) account exists for this email.
+ * Used by the sign-up form to catch duplicate accounts early and guide the
+ * user to sign in instead. Anonymous guest rows are ignored, and invalid
+ * input never matches.
+ */
+export const emailExists = query({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return false;
+    const row = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", normalized))
+      .first();
+    return row !== null && row.isAnonymous !== true;
+  },
+});
+
+/**
  * Search registered, non-guest users by name or email (for invite pickers).
  * Excludes the signed-in user. Best-effort substring match, capped results.
  */

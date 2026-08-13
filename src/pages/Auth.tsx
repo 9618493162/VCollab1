@@ -1,3 +1,4 @@
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,9 +17,12 @@ import {
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/use-auth";
+import { useConvex } from "convex/react";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface AuthProps {
   redirectAfterAuth?: string;
@@ -61,10 +65,43 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   );
   const mode: "signin" | "register" =
     searchParams.get("mode") === "register" ? "register" : "signin";
+  const convex = useConvex();
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [emailExists, setEmailExists] = useState<boolean | null>(null);
+
+  // Duplicate-account protection (register mode): debounce a real backend
+  // check so users creating an account learn early if one already exists.
+  useEffect(() => {
+    if (mode !== "register") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEmailExists(null);
+      return;
+    }
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmed)) {
+      setEmailExists(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      convex
+        .query(api.users.emailExists, { email: trimmed })
+        .then((exists) => {
+          if (!cancelled) setEmailExists(exists);
+        })
+        .catch(() => {
+          if (!cancelled) setEmailExists(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [email, mode, convex]);
 
   const switchMode = (next: "signin" | "register") => {
     if (next === mode) return;
@@ -84,6 +121,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (mode === "register" && emailExists === true) {
+      setError("An account with this email already exists. Please sign in instead.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -172,6 +213,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           className="h-11 rounded-xl pl-9"
                           disabled={isLoading}
                           required
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
                         />
                       </div>
                       <Button
@@ -179,7 +222,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         variant="outline"
                         size="icon"
                         className="h-11 w-11 rounded-xl"
-                        disabled={isLoading}
+                        disabled={isLoading || (mode === "register" && emailExists === true)}
                       >
                         {isLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -188,6 +231,18 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         )}
                       </Button>
                     </div>
+                    {emailExists === true && (
+                      <p className="mt-2 text-sm text-amber-500">
+                        An account with this email already exists.{" "}
+                        <button
+                          type="button"
+                          onClick={() => switchMode("signin")}
+                          className="font-medium underline underline-offset-2 transition-colors hover:text-primary"
+                        >
+                          Sign in instead
+                        </button>
+                      </p>
+                    )}
                     {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
                     <div className="mt-5">
