@@ -34,18 +34,47 @@ function resolveRedirectAfterAuth(
   return fallback;
 }
 
+function friendlyError(raw: unknown, fallback: string) {
+  const message = raw instanceof Error ? raw.message : String(raw);
+  const lower = message.toLowerCase();
+  if (lower.includes("invalid") || lower.includes("email")) {
+    return "Please enter a valid email address.";
+  }
+  if (
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("unavailable") ||
+    lower.includes("failed to connect")
+  ) {
+    return "Unable to connect. Please try again.";
+  }
+  return fallback;
+}
+
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const redirect = resolveRedirectAfterAuth(
     searchParams.get("returnTo"),
     redirectAfterAuth,
   );
+  const mode: "signin" | "register" =
+    searchParams.get("mode") === "register" ? "register" : "signin";
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const switchMode = (next: "signin" | "register") => {
+    if (next === mode) return;
+    setStep("signIn");
+    setError(null);
+    const params = new URLSearchParams(searchParams);
+    if (next === "signin") params.delete("mode");
+    else params.set("mode", "register");
+    setSearchParams(params, { replace: true });
+  };
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -65,9 +94,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (error) {
       console.error("Email sign-in error:", error);
       setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to send verification code. Please try again.",
+        friendlyError(error, "We couldn't send a verification code. Please try again."),
       );
       setIsLoading(false);
     }
@@ -97,11 +124,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     } catch (error) {
       console.error("Guest login error:", error);
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to sign in as guest. Please try again.",
-      );
+      setError(friendlyError(error, "Failed to sign in as guest. Please try again."));
       setIsLoading(false);
     }
   };
@@ -129,10 +152,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               <>
                 <CardHeader className="text-center">
                   <CardTitle className="font-display text-xl font-bold tracking-tight">
-                    Welcome to VCollab
+                    {mode === "register" ? "Create your account" : "Welcome back"}
                   </CardTitle>
                   <CardDescription>
-                    Enter your email and we'll send a sign-in code
+                    {mode === "register"
+                      ? "Enter your email and we'll send a code to get you started"
+                      : "Sign in to continue to VCollab — we'll send a sign-in code"}
                   </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleEmailSubmit}>
@@ -272,16 +297,45 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </>
             )}
 
-            <div className="rounded-b-2xl border-t border-border/60 bg-background/50 px-6 py-3.5 text-center text-xs text-muted-foreground">
-              Secured by{" "}
-              <a
-                href="https://freebuff.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline transition-colors hover:text-primary"
-              >
-                freebuff.com
-              </a>
+            <div className="rounded-b-2xl border-t border-border/60 bg-background/50 px-6 py-3.5">
+              <p className="text-center text-xs text-muted-foreground">
+                {mode === "register" ? (
+                  <>
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => switchMode("signin")}
+                      disabled={isLoading}
+                      className="font-medium text-foreground underline underline-offset-2 transition-colors hover:text-primary"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    New to VCollab?{" "}
+                    <button
+                      type="button"
+                      onClick={() => switchMode("register")}
+                      disabled={isLoading}
+                      className="font-medium text-foreground underline underline-offset-2 transition-colors hover:text-primary"
+                    >
+                      Create account
+                    </button>
+                  </>
+                )}
+              </p>
+              <p className="mt-2 text-center text-xs text-muted-foreground/70">
+                Secured by{" "}
+                <a
+                  href="https://freebuff.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline transition-colors hover:text-primary"
+                >
+                  freebuff.com
+                </a>
+              </p>
             </div>
           </Card>
         </div>

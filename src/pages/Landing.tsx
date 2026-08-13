@@ -8,6 +8,7 @@ import {
   Globe2,
   KanbanSquare,
   Lock,
+  Menu,
   MessageSquare,
   MicOff,
   MonitorUp,
@@ -15,10 +16,11 @@ import {
   Sparkles,
   Users,
   Video,
+  X,
   Zap,
 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/Logo";
@@ -55,11 +57,26 @@ const STEPS = [
   { n: "03", title: "Get AI-powered insights", body: "Record the call and get a transcript, a summary, and action items — then ask the meeting questions afterwards." },
 ];
 
+const NAV_LINKS = [
+  { label: "Features", href: "#features" },
+  { label: "AI", href: "#ai" },
+  { label: "Collaboration", href: "#collaboration" },
+  { label: "Security", href: "#security" },
+];
+
 export default function Landing() {
-  const { isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [joinCode, setJoinCode] = useState("");
-  const primaryTarget = isAuthenticated ? "/dashboard" : "/auth";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const primaryTarget = "/auth?mode=register";
+  const signInTarget = "/auth?mode=signin";
+
+  // Authenticated users opening the root route go straight to the dashboard
+  // (requirement: logged out → landing page, logged in → /dashboard).
+  if (!isLoading && isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,28 +95,87 @@ export default function Landing() {
       {/* ---------- nav ---------- */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link to="/">
+          <Link to="/" onClick={() => setMenuOpen(false)}>
             <Logo />
           </Link>
-          <nav className="flex items-center gap-6 text-sm">
-            <a href="#features" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
-              Features
-            </a>
-            <a href="#how" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
-              How it works
-            </a>
-            <a href="#ai" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
-              AI
-            </a>
+
+          {/* desktop nav */}
+          <nav className="hidden items-center gap-6 text-sm md:flex">
+            {NAV_LINKS.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="hidden items-center gap-3 md:flex">
             <ThemeToggle />
             <Link
-              to={primaryTarget}
-              className="rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-1.5 font-medium text-white shadow-md transition-all hover:shadow-lg hover:brightness-110"
+              to={signInTarget}
+              className="rounded-full border border-border/70 px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary"
             >
-              {isAuthenticated ? "Open meetings" : "Sign in"}
+              Sign in
             </Link>
-          </nav>
+            <Link
+              to={primaryTarget}
+              className="rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-1.5 text-sm font-medium text-white shadow-md transition-all hover:shadow-lg hover:brightness-110"
+            >
+              Get started
+            </Link>
+          </div>
+
+          {/* mobile controls */}
+          <div className="flex items-center gap-2 md:hidden">
+            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              className="flex size-9 items-center justify-center rounded-full border border-border/60 text-foreground transition-colors hover:bg-muted"
+            >
+              {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </button>
+          </div>
         </div>
+
+        {/* mobile menu */}
+        {menuOpen && (
+          <div className="border-t border-border/50 bg-background/95 backdrop-blur-xl md:hidden">
+            <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {link.label}
+                </a>
+              ))}
+              <div className="mt-3 flex flex-col gap-2 border-t border-border/50 pt-4">
+                <Link
+                  to={signInTarget}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex h-11 items-center justify-center rounded-full border border-border/70 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  to={primaryTarget}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex h-11 items-center justify-center rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 text-sm font-medium text-white shadow-md transition-all hover:brightness-110"
+                >
+                  Get started
+                </Link>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* ---------- hero ---------- */}
@@ -148,20 +224,19 @@ export default function Landing() {
           transition={transition(0.35)}
           className="relative mt-10 flex flex-col items-center gap-3 sm:flex-row"
         >
-          <Button asChild size="lg" className="h-12 rounded-full px-8 btn-glow">
+          <Button asChild size="lg" className="h-12 w-full rounded-full px-8 btn-glow sm:w-auto">
             <Link to={primaryTarget}>
-              Start a meeting <ArrowRight className="ml-2 size-4" />
+              Get started <ArrowRight className="ml-2 size-4" />
             </Link>
           </Button>
-          <a href="#join" className="h-12 rounded-full">
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-12 w-full rounded-full px-8 sm:w-auto"
-            >
-              Join a meeting
-            </Button>
-          </a>
+          <Button
+            asChild
+            size="lg"
+            variant="outline"
+            className="h-12 w-full rounded-full px-8 sm:w-auto"
+          >
+            <Link to={signInTarget}>Sign in</Link>
+          </Button>
         </motion.div>
 
         {/* join input */}
@@ -429,7 +504,7 @@ export default function Landing() {
       </section>
 
       {/* ---------- collaboration ---------- */}
-      <section className="border-t border-border/60 px-4 py-24 sm:px-6">
+      <section id="collaboration" className="scroll-mt-20 border-t border-border/60 px-4 py-24 sm:px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div
             {...fadeUp}
@@ -469,7 +544,7 @@ export default function Landing() {
       </section>
 
       {/* ---------- security ---------- */}
-      <section className="border-t border-border/60 px-4 py-24 sm:px-6">
+      <section id="security" className="scroll-mt-20 border-t border-border/60 px-4 py-24 sm:px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div
             {...fadeUp}
@@ -531,7 +606,7 @@ export default function Landing() {
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="h-13 rounded-full px-10 py-4 btn-glow">
               <Link to={primaryTarget}>
-                Start a meeting <ArrowRight className="ml-2 size-4" />
+                Get started <ArrowRight className="ml-2 size-4" />
               </Link>
             </Button>
             <Button
@@ -540,7 +615,7 @@ export default function Landing() {
               size="lg"
               className="h-13 rounded-full px-10 py-4"
             >
-              <a href="#join">Join a meeting</a>
+              <Link to={signInTarget}>Sign in</Link>
             </Button>
           </div>
         </motion.div>
