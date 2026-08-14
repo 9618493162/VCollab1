@@ -330,10 +330,10 @@ function NavLink({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm transition-colors",
+        "flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm transition-all",
         active
-          ? "bg-primary/10 font-medium text-primary"
-          : "text-muted-foreground hover:text-foreground",
+          ? "glass-interactive font-medium text-primary"
+          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
       )}
     >
       {icon}

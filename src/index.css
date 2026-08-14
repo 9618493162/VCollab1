@@ -50,7 +50,7 @@
   --card-foreground: oklch(0.2 0.03 265);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2 0.03 265);
-  --primary: oklch(0.51 0.24 280);
+  --primary: oklch(0.52 0.2 264);
   --primary-foreground: oklch(0.985 0.005 260);
   --secondary: oklch(0.94 0.008 265);
   --secondary-foreground: oklch(0.25 0.03 265);
@@ -61,15 +61,15 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.9 0.008 265);
   --input: oklch(0.9 0.008 265);
-  --ring: oklch(0.62 0.2 280);
-  --chart-1: oklch(0.55 0.23 280);
+  --ring: oklch(0.58 0.18 264);
+  --chart-1: oklch(0.56 0.19 264);
   --chart-2: oklch(0.65 0.18 230);
   --chart-3: oklch(0.7 0.16 310);
   --chart-4: oklch(0.6 0.18 160);
   --chart-5: oklch(0.62 0.2 30);
   --sidebar: oklch(0.97 0.004 260);
   --sidebar-foreground: oklch(0.2 0.03 265);
-  --sidebar-primary: oklch(0.51 0.24 280);
+  --sidebar-primary: oklch(0.52 0.2 264);
   --sidebar-primary-foreground: oklch(0.985 0.005 260);
   --sidebar-accent: oklch(0.93 0.02 275);
   --sidebar-accent-foreground: oklch(0.3 0.1 280);
@@ -84,7 +84,7 @@
   --card-foreground: oklch(0.965 0.006 260);
   --popover: oklch(0.185 0.026 268);
   --popover-foreground: oklch(0.965 0.006 260);
-  --primary: oklch(0.63 0.21 285);
+  --primary: oklch(0.66 0.17 264);
   --primary-foreground: oklch(0.98 0.005 260);
   --secondary: oklch(0.24 0.03 268);
   --secondary-foreground: oklch(0.965 0.006 260);
@@ -95,15 +95,15 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.63 0.21 285);
-  --chart-1: oklch(0.63 0.21 285);
+  --ring: oklch(0.66 0.17 264);
+  --chart-1: oklch(0.66 0.17 264);
   --chart-2: oklch(0.65 0.17 230);
   --chart-3: oklch(0.68 0.16 315);
   --chart-4: oklch(0.66 0.15 160);
   --chart-5: oklch(0.66 0.18 30);
   --sidebar: oklch(0.16 0.024 268);
   --sidebar-foreground: oklch(0.965 0.006 260);
-  --sidebar-primary: oklch(0.63 0.21 285);
+  --sidebar-primary: oklch(0.66 0.17 264);
   --sidebar-primary-foreground: oklch(0.98 0.005 260);
   --sidebar-accent: oklch(0.24 0.04 278);
   --sidebar-accent-foreground: oklch(0.9 0.04 285);
@@ -144,9 +144,9 @@
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
   }
-  /* violet-blue gradient text */
+  /* refined indigo gradient text (calmer than the original violet-fuchsia) */
   .text-gradient {
-    background: linear-gradient(100deg, #818cf8 0%, #a78bfa 45%, #e879f9 100%);
+    background: linear-gradient(100deg, #7c8cf8 0%, #9d8cf8 45%, #c084fc 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -205,9 +205,141 @@
   mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 100%);
 }
 
-/* meeting tile speaking ring */
+/* meeting tile speaking ring — slow, calm pulse (not a strobe) */
+@keyframes speaking-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklch, var(--primary) 85%, transparent),
+      0 0 22px -4px color-mix(in oklch, var(--primary) 50%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--primary) 65%, transparent),
+      0 0 32px -2px color-mix(in oklch, var(--primary) 60%, transparent);
+  }
+}
 .speaking-ring {
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--primary) 90%, transparent), 0 0 24px -4px color-mix(in oklch, var(--primary) 60%, transparent);
+  animation: speaking-pulse 1.8s ease-in-out infinite;
+}
+
+/* ============ VCollab fluid material system ============ */
+
+/* structural material — sidebar, large panels (stronger blur + depth) */
+.glass-strong {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--card) 88%, transparent),
+    color-mix(in oklch, var(--card) 70%, transparent)
+  );
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid color-mix(in oklch, var(--border) 90%, transparent);
+}
+
+/* floating material — controls, chat, popovers (translucent + edge light) */
+.glass-float {
+  background: color-mix(in oklch, var(--card) 52%, transparent);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
+  box-shadow:
+    0 12px 40px -12px color-mix(in oklch, var(--foreground) 16%, transparent),
+    inset 0 1px 0 0 color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+/* interactive material — buttons, toggles, cards */
+.glass-interactive {
+  background: color-mix(in oklch, var(--card) 68%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+}
+
+/* premium card surface — soft gradient + hairline + top light */
+.card-surface {
+  position: relative;
+  border-radius: calc(var(--radius) + 6px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--card) 96%, transparent),
+    color-mix(in oklch, var(--muted) 48%, transparent)
+  );
+  border: 1px solid var(--border);
+}
+.card-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--foreground) 16%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* layered depth shadows (theme-aware: tinted by foreground) */
+.depth-1 {
+  box-shadow:
+    0 1px 2px -1px color-mix(in oklch, var(--foreground) 7%, transparent),
+    0 4px 14px -4px color-mix(in oklch, var(--foreground) 9%, transparent);
+}
+.depth-2 {
+  box-shadow:
+    0 2px 4px -2px color-mix(in oklch, var(--foreground) 9%, transparent),
+    0 14px 34px -8px color-mix(in oklch, var(--foreground) 15%, transparent);
+}
+.depth-3 {
+  box-shadow:
+    0 4px 8px -4px color-mix(in oklch, var(--foreground) 12%, transparent),
+    0 32px 72px -18px color-mix(in oklch, var(--foreground) 26%, transparent);
+}
+
+/* instant press feedback — Apple-style pointer-down response.
+   No transition is declared here on purpose: the element's own transition
+   (e.g. transition-all on buttons) handles the animation, and for elements
+   without one the feedback is instant — which is exactly what press
+   feedback should feel like. */
+.press:active {
+  transform: scale(0.965);
+  filter: brightness(0.96);
+}
+
+/* calm hover lift for cards */
+.hover-lift {
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+}
+
+/* balanced headline wrapping */
+.text-balance {
+  text-wrap: balance;
+}
+
+/* respect reduced motion: kill decorative/looping animation */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .aurora-blob,
+  .float-slow,
+  .speaking-ring {
+    animation: none !important;
+  }
+  .hover-lift:hover {
+    transform: none;
+  }
+  .press:active {
+    transform: none;
+  }
 }
 
 /* thin, theme-aware scrollbars */

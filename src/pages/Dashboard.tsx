@@ -241,7 +241,7 @@ export default function Dashboard() {
           <Button
             onClick={handleCreate}
             disabled={creating}
-            className="h-12 rounded-full px-8 btn-glow"
+            className="press h-12 rounded-full px-8 btn-glow"
           >
             {creating ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
@@ -253,7 +253,7 @@ export default function Dashboard() {
         </div>
 
         {/* quick actions */}
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="glass-float depth-2 mt-8 flex flex-col gap-3 rounded-3xl p-3 sm:flex-row">
           <form onSubmit={handleJoin} className="flex flex-1 items-center gap-2">
             <Input
               value={joinCode}
@@ -307,7 +307,7 @@ export default function Dashboard() {
           {/* left column */}
           <div className="space-y-6 lg:col-span-2">
             {/* upcoming */}
-            <section className="glass rounded-2xl p-6">
+            <section className="glass-float depth-1 rounded-2xl p-6">
               <div className="flex items-center justify-between">
                 <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
                   <CalendarClock className="size-4 text-primary" /> Upcoming
@@ -542,7 +542,7 @@ export default function Dashboard() {
             </section>
 
             {/* recent */}
-            <section className="glass rounded-2xl p-6">
+            <section className="glass-float depth-1 rounded-2xl p-6">
               <div className="flex items-center justify-between">
                 <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
                   <Video className="size-4 text-primary" /> Recent meetings
@@ -613,7 +613,7 @@ export default function Dashboard() {
           </div>
 
           {/* right column: AI insights */}
-          <section className="glass h-fit rounded-2xl p-6">
+          <section className="glass-float depth-1 h-fit rounded-2xl p-6">
             <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
               <Sparkles className="size-4 text-primary" /> AI insights
             </h2>
@@ -637,7 +637,7 @@ export default function Dashboard() {
             ) : (
               <div className="mt-4 space-y-4">
                 {insights.summaries.map((s) => (
-                  <div key={s._id} className="rounded-xl border border-border/60 p-4">
+                  <div key={s._id} className="card-surface p-4">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                       {new Date(s.createdAt).toLocaleDateString()}
                     </p>
@@ -758,10 +758,12 @@ function StatCard({
   sub: string;
 }) {
   return (
-    <div className="glass group rounded-2xl p-5 transition-all hover:-translate-y-1 hover:shadow-xl">
+    <div className="glass-float hover-lift press group rounded-2xl p-5">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <Icon className="size-4 text-muted-foreground/50 transition-colors group-hover:text-primary" />
+        <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/15 to-violet-500/10 text-muted-foreground/70 transition-colors group-hover:text-primary">
+          <Icon className="size-4" />
+        </span>
       </div>
       <p className="mt-3 font-display text-3xl font-bold tabular-nums">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground/80">{sub}</p>

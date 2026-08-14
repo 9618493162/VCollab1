@@ -4,7 +4,8 @@ import { useCallRoom, type PeerQuality } from "@/hooks/use-call-room";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { FluidPanel } from "@/components/ui/fluid";
 import {
   BadgeCheck,
   Ban,
@@ -181,6 +182,7 @@ export default function Call() {
   const [selfMinimized, setSelfMinimized] = useState(false);
   const [selfSize] = useState<{ w: number; h: number }>({ w: 208, h: 117 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const reduceMotion = useReducedMotion();
   const burstId = useRef(0);
 
   const call = useCallRoom(code, displayName);
@@ -441,6 +443,13 @@ export default function Call() {
     });
   };
   const onPointerUp = () => {
+    if (dragRef.current) {
+      // clamp to the viewport so the floating self-view can't get lost
+      setSelfPos((prev) => ({
+        x: Math.min(Math.max(prev.x, 8), window.innerWidth - selfSize.w - 8),
+        y: Math.min(Math.max(prev.y, 8), window.innerHeight - 96),
+      }));
+    }
     dragRef.current = null;
   };
 
@@ -849,9 +858,16 @@ export default function Call() {
 
             {/* floating self view (speaker / focus) */}
             {entered && view !== "gallery" && (
-              <div
-                className="absolute z-20"
-                style={{ left: selfPos.x, top: selfPos.y, width: selfSize.w }}
+              <motion.div
+                className="absolute left-0 top-0 z-20"
+                style={{ width: selfSize.w }}
+                initial={false}
+                animate={{ x: selfPos.x, y: selfPos.y }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 460, damping: 34, mass: 0.9 }
+                }
               >
                 <div
                   onPointerDown={onPointerDown}
@@ -896,7 +912,7 @@ export default function Call() {
                     </div>
                   )}
                 </div>
-              </div>
+            </motion.div>
             )}
 
             {/* reactions burst */}
@@ -980,7 +996,8 @@ export default function Call() {
           </main>
 
           {/* ---------- control bar ---------- */}
-          <footer className="relative z-10 flex h-20 shrink-0 items-center justify-center gap-2 border-t border-white/10 bg-black/30 px-3 backdrop-blur-md sm:gap-2.5">
+          <footer className="relative z-10 flex h-24 shrink-0 items-center justify-center px-3 pb-5">
+            <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-900/70 p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:gap-2">
             <ControlButton
               active={call.micOn}
               activeClass="bg-white text-black"
@@ -1033,7 +1050,7 @@ export default function Call() {
                 <Sparkles className="size-5" />
               </ControlButton>
               {showReactions && (
-                <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 bg-neutral-900/95 p-2 shadow-2xl backdrop-blur-md">
+                <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 bg-neutral-900/85 p-2 shadow-2xl backdrop-blur-2xl">
                   {REACTION_EMOJIS.map((emoji) => (
                     <button
                       key={emoji}
@@ -1127,74 +1144,94 @@ export default function Call() {
                 <PhoneOff className="size-5" />
               </Button>
             )}
+          </div>
           </footer>
 
           {/* ---------- side panels ---------- */}
-          {panel === "chat" && (
-            <ChatPanel
-              call={call}
-              onClose={() => setPanel("none")}
-            />
-          )}
-          {panel === "people" && (
-            <PeoplePanel
-              code={code}
-              call={call}
-              isHost={isHost === true}
-              isCoHost={isCoHost}
-              coHosts={meetingSettings?.coHosts}
-              waitingList={waitingList}
-              onAdmit={(clientId) => void admitParticipant({ code, clientId })}
-              onAdmitAll={() => void admitAllWaiting({ code })}
-              onReject={(clientId) => void rejectParticipant({ code, clientId })}
-              onMakeCoHost={(clientId) =>
-                void makeCoHost({ code, clientId }).catch((error) =>
-                  toast.error(error instanceof Error ? error.message : "Couldn't update co-host."),
-                )
-              }
-              onMuteAll={() => void handleMuteAll()}
-              onClose={() => setPanel("none")}
-            />
-          )}
-          {panel === "devices" && <DeviceSettingsPanel call={call} onClose={() => setPanel("none")} />}
-          {panel === "notes" && (
-            <NotesTasksPanel code={code} onClose={() => setPanel("none")} />
-          )}
-          {panel === "ai" && (
-            <AIPanel code={code} call={call} onClose={() => setPanel("none")} />
-          )}
-          {panel === "polls" && (
-            <PollsPanel
-              code={code}
-              isHost={isHost === true}
-              clientId={call.clientId}
-              onClose={() => setPanel("none")}
-            />
-          )}
-          {panel === "qa" && (
-            <QAPanel
-              code={code}
-              isHost={isHost === true}
-              clientId={call.clientId}
-              onClose={() => setPanel("none")}
-            />
-          )}
-          {panel === "agenda" && (
-            <AgendaPanel
-              code={code}
-              isHost={isHost === true}
-              onClose={() => setPanel("none")}
-            />
-          )}
-          {panel === "breakouts" && (
-            <BreakoutsPanel
-              code={code}
-              isHost={isHost === true}
-              clientId={call.clientId}
-              name={call.participants?.find((p) => p.clientId === call.clientId)?.name ?? displayName}
-              onClose={() => setPanel("none")}
-            />
-          )}
+          <AnimatePresence>
+            {panel === "chat" && (
+              <FluidPanel key="chat">
+                <ChatPanel call={call} onClose={() => setPanel("none")} />
+              </FluidPanel>
+            )}
+            {panel === "people" && (
+              <FluidPanel key="people">
+                <PeoplePanel
+                  code={code}
+                  call={call}
+                  isHost={isHost === true}
+                  isCoHost={isCoHost}
+                  coHosts={meetingSettings?.coHosts}
+                  waitingList={waitingList}
+                  onAdmit={(clientId) => void admitParticipant({ code, clientId })}
+                  onAdmitAll={() => void admitAllWaiting({ code })}
+                  onReject={(clientId) => void rejectParticipant({ code, clientId })}
+                  onMakeCoHost={(clientId) =>
+                    void makeCoHost({ code, clientId }).catch((error) =>
+                      toast.error(error instanceof Error ? error.message : "Couldn't update co-host."),
+                    )
+                  }
+                  onMuteAll={() => void handleMuteAll()}
+                  onClose={() => setPanel("none")}
+                />
+              </FluidPanel>
+            )}
+            {panel === "devices" && (
+              <FluidPanel key="devices">
+                <DeviceSettingsPanel call={call} onClose={() => setPanel("none")} />
+              </FluidPanel>
+            )}
+            {panel === "notes" && (
+              <FluidPanel key="notes">
+                <NotesTasksPanel code={code} onClose={() => setPanel("none")} />
+              </FluidPanel>
+            )}
+            {panel === "ai" && (
+              <FluidPanel key="ai">
+                <AIPanel code={code} call={call} onClose={() => setPanel("none")} />
+              </FluidPanel>
+            )}
+            {panel === "polls" && (
+              <FluidPanel key="polls">
+                <PollsPanel
+                  code={code}
+                  isHost={isHost === true}
+                  clientId={call.clientId}
+                  onClose={() => setPanel("none")}
+                />
+              </FluidPanel>
+            )}
+            {panel === "qa" && (
+              <FluidPanel key="qa">
+                <QAPanel
+                  code={code}
+                  isHost={isHost === true}
+                  clientId={call.clientId}
+                  onClose={() => setPanel("none")}
+                />
+              </FluidPanel>
+            )}
+            {panel === "agenda" && (
+              <FluidPanel key="agenda">
+                <AgendaPanel
+                  code={code}
+                  isHost={isHost === true}
+                  onClose={() => setPanel("none")}
+                />
+              </FluidPanel>
+            )}
+            {panel === "breakouts" && (
+              <FluidPanel key="breakouts">
+                <BreakoutsPanel
+                  code={code}
+                  isHost={isHost === true}
+                  clientId={call.clientId}
+                  name={call.participants?.find((p) => p.clientId === call.clientId)?.name ?? displayName}
+                  onClose={() => setPanel("none")}
+                />
+              </FluidPanel>
+            )}
+          </AnimatePresence>
           {panel === "whiteboard" && (
             <WhiteboardOverlay
               code={code}
@@ -1410,10 +1447,10 @@ function SelfTile({
   sharing: boolean;
 }) {
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900 ring-1 ring-white/10">
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900/90 ring-1 ring-white/10 shadow-lg shadow-black/20">
       {stream ? <VideoSurface stream={stream} /> : <Avatar name={name} />}
       <div className="absolute bottom-2.5 left-3 flex items-center gap-2">
-        <span className="rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
+        <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
           {name} {sharing ? "· presenting" : "(you)"}
         </span>
         {!micOn && (
@@ -1451,7 +1488,7 @@ function Tile({
     <div
       key={peerId}
       className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900 transition-shadow",
+        "relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900/90 shadow-lg shadow-black/20",
         speaking ? "ring-2 ring-primary speaking-ring" : "ring-1 ring-white/10",
       )}
     >
@@ -1461,16 +1498,16 @@ function Tile({
         <VideoSurface stream={stream} />
       )}
       <div className="absolute bottom-2.5 left-3 flex items-center gap-1.5">
-        <span className="rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
+        <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
           {name}
         </span>
         {presenting && (
-          <span className="flex items-center gap-1 rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
+          <span className="flex items-center gap-1 rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
             <MonitorUp className="size-3" /> presenting
           </span>
         )}
         {micOff && (
-          <span className="rounded-lg bg-black/50 p-1 backdrop-blur-sm">
+          <span className="rounded-lg bg-black/45 p-1 backdrop-blur-md">
             <MicOff className="size-3" />
           </span>
         )}
@@ -1519,7 +1556,7 @@ function ControlButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-12 items-center justify-center rounded-full transition-all hover:scale-105",
+        "flex size-12 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95",
         active ? activeClass : inactiveClass,
       )}
     >
@@ -1545,7 +1582,7 @@ function ChatPanel({
   }, [call.messages?.length]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/80 backdrop-blur-2xl">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
         <p className="text-sm font-medium">Chat</p>
         <button
@@ -1649,7 +1686,7 @@ function PeoplePanel({
   }, [call.participants, search]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/80 backdrop-blur-2xl">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
         <p className="text-sm font-medium">
           People{" "}

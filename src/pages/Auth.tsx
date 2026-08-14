@@ -211,7 +211,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
       <div className="relative z-10 flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-sm">
-          <Card className="glass rounded-2xl border-none shadow-2xl">
+          <Card className="glass-float depth-3 rounded-3xl border-none">
             {step === "signIn" ? (
               <>
                 <CardHeader className="text-center">
@@ -366,7 +366,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   <CardFooter className="flex-col gap-2">
                     <Button
                       type="submit"
-                      className="w-full rounded-xl btn-glow"
+                      className="press w-full rounded-xl btn-glow"
                       disabled={isLoading || otp.length !== 6}
                     >
                       {isLoading ? (
