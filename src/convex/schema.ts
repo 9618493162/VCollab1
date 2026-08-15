@@ -49,6 +49,18 @@ const schema = defineSchema(
       startedAt: v.optional(v.number()),
       endedAt: v.optional(v.number()),
       locked: v.optional(v.boolean()),
+      // live recording state, broadcast to everyone in the call so nobody
+      // records secretly. Only the host/co-host that started it may pause/
+      // resume/stop (enforced in convex/recording.ts).
+      recording: v.optional(
+        v.object({
+          active: v.boolean(),
+          paused: v.optional(v.boolean()),
+          startedAt: v.optional(v.number()),
+          byClientId: v.optional(v.string()),
+          byName: v.optional(v.string()),
+        }),
+      ),
     }).index("by_code", ["code"]).index("by_createdBy", ["createdBy"]),
 
     // who is currently in a room (mesh call presence)

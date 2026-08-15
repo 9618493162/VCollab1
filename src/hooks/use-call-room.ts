@@ -51,6 +51,72 @@ type SpeechRecognitionCtor = new () => {
   onerror: ((event: unknown) => void) | null;
 };
 
+/**
+ * Composite the rendered self + remote video tiles onto a canvas and return a
+ * capture track so recordings include video. Returns null when the browser
+ * can't do it (caller falls back to audio-only). Tiles are drawn as a grid
+ * using object-fit:cover math at ~4fps to keep CPU low.
+ */
+function buildVideoCapture(
+  getTiles: () => { id: string; el: HTMLVideoElement | null }[],
+): { track: MediaStreamTrack; stop: () => void } | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1280;
+  canvas.height = 720;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  let stream: MediaStream | null = null;
+  try {
+    stream = canvas.captureStream(4);
+  } catch {
+    return null;
+  }
+  const track = stream.getVideoTracks()[0];
+  if (!track) return null;
+
+  const PAD = 8;
+  const GAP = 8;
+  let timer = 0;
+
+  const draw = () => {
+    const tiles = getTiles().filter((t) => t.id && t.el);
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (tiles.length === 0) return;
+    const cols = Math.ceil(Math.sqrt(tiles.length));
+    const rows = Math.ceil(tiles.length / cols);
+    const cellW = (canvas.width - PAD * 2 - GAP * (cols - 1)) / cols;
+    const cellH = (canvas.height - PAD * 2 - GAP * (rows - 1)) / rows;
+    tiles.forEach((tile, i) => {
+      const el = tile.el!;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = PAD + col * (cellW + GAP);
+      const y = PAD + row * (cellH + GAP);
+      if (el.readyState >= 2 && el.videoWidth > 0) {
+        const s = Math.max(cellW / el.videoWidth, cellH / el.videoHeight);
+        const sw = el.videoWidth * s;
+        const sh = el.videoHeight * s;
+        ctx.drawImage(el, x + (cellW - sw) / 2, y + (cellH - sh) / 2, sw, sh);
+      } else {
+        ctx.fillStyle = "#171717";
+        ctx.fillRect(x, y, cellW, cellH);
+      }
+    });
+  };
+
+  draw();
+  timer = window.setInterval(draw, 250);
+  return {
+    track,
+    stop: () => {
+      window.clearInterval(timer);
+      track.stop();
+    },
+  };
+}
+
 function getSpeechRecognition(): SpeechRecognitionCtor | null {
   const w = window as unknown as {
     SpeechRecognition?: SpeechRecognitionCtor;
@@ -65,7 +131,11 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
  * raise hand, reactions, live captions (Web Speech API), recording with
  * AI transcription, and host kick/mute/end handling.
  */
-export function useCallRoom(code: string, name: string) {
+export function useCallRoom(
+  code: string,
+  name: string,
+  opts?: { getVideoTiles?: () => { id: string; el: HTMLVideoElement | null }[] },
+) {
   const [clientId] = useState(() =>
     typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -105,6 +175,7 @@ export function useCallRoom(code: string, name: string) {
 
   // ---- recording ----
   const [recording, setRecording] = useState(false);
+  const [recordingPaused, setRecordingPaused] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState<
     "idle" | "recording" | "processing" | "ready" | "error"
   >("idle");
@@ -119,6 +190,7 @@ export function useCallRoom(code: string, name: string) {
   const shareStreamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const videoCaptureRef = useRef<{ track: MediaStreamTrack; stop: () => void } | null>(null);
 
   // ---- convex ----
   const joinRoom = useMutation(api.call.joinRoom);
@@ -132,6 +204,8 @@ export function useCallRoom(code: string, name: string) {
   const generateUploadUrl = useMutation(api.rooms.generateUploadUrl);
   const saveRecording = useMutation(api.call.saveRecording);
   const transcribeMeeting = useAction(api.ai.transcribeMeeting);
+  const recordingState = useQuery(api.recording.getRecordingState, joined ? { code } : "skip");
+  const setRecordingState = useMutation(api.recording.setRecordingState);
 
   const signals = useQuery(api.call.listSignals, joined ? { code, to: clientId } : "skip");
   const participants = useQuery(api.call.listParticipants, joined ? { code } : "skip");
@@ -287,6 +361,9 @@ export function useCallRoom(code: string, name: string) {
     joinedRef.current = false;
     setJoined(false);
     recorderRef.current?.stop();
+    videoCaptureRef.current?.stop();
+    videoCaptureRef.current = null;
+    void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
     for (const pc of pcRef.current.values()) pc.close();
     pcRef.current.clear();
     streamRef.current.clear();
@@ -296,7 +373,7 @@ export function useCallRoom(code: string, name: string) {
     setQuality({});
     setCaptionsEnabled(false);
     await leaveRoom({ code, clientId });
-  }, [code, clientId, leaveRoom]);
+  }, [code, clientId, leaveRoom, setRecordingState]);
 
   const handleSignal = useCallback(
     async (sig: Signal) => {
@@ -372,6 +449,9 @@ export function useCallRoom(code: string, name: string) {
       } else if (sig.kind === "end") {
         setEndedByHost(true);
         recorderRef.current?.stop();
+        videoCaptureRef.current?.stop();
+        videoCaptureRef.current = null;
+        void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
         void leave();
       } else if (sig.kind === "mute") {
         // mute-all broadcasts to everyone; the sender skips themselves
@@ -587,12 +667,15 @@ export function useCallRoom(code: string, name: string) {
     const streams = streamRef.current;
     return () => {
       recorderRef.current?.stop();
+      videoCaptureRef.current?.stop();
+      videoCaptureRef.current = null;
+      if (joinedRef.current) void leaveRoom({ code, clientId });
+      void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
       for (const pc of pcs.values()) pc.close();
       pcs.clear();
       streams.clear();
-      if (joinedRef.current) void leaveRoom({ code, clientId });
     };
-  }, [code, clientId, leaveRoom]);
+  }, [code, clientId, leaveRoom, setRecordingState]);
 
   const join = useCallback(async () => {
     if (joinedRef.current) return;
@@ -754,30 +837,76 @@ export function useCallRoom(code: string, name: string) {
     [clientId, code, name, sendReaction],
   );
 
-  // ---- recording: mix local + remote audio, upload, then transcribe ----
+  // ---- recording: server-visible state + local capture ----
+  // Audio is a mix of local + all remote audio tracks. When the caller supplies
+  // rendered tile elements, we also composite self + remote video onto a canvas
+  // and capture that as the video track (falls back to audio-only otherwise).
   const startRecording = useCallback(async () => {
     if (recorderRef.current) return;
+
+    // Claim the recording server-side first so every participant sees the
+    // indicator immediately and only the host/co-host can start one.
+    const startedAt = Date.now();
+    try {
+      await setRecordingState({
+        code,
+        clientId,
+        state: { active: true, startedAt, byClientId: clientId, byName: name },
+      });
+    } catch (error) {
+      setRecordingStatus("error");
+      setRecordingError(
+        error instanceof Error ? error.message : "Only the host can start a recording.",
+      );
+      return;
+    }
+
     const mixed = new MediaStream();
     localStreamRef.current?.getAudioTracks().forEach((t) => mixed.addTrack(t));
     for (const stream of streamRef.current.values()) {
       stream.getAudioTracks().forEach((t) => mixed.addTrack(t));
     }
     if (mixed.getAudioTracks().length === 0) {
+      void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
       setRecordingStatus("error");
       setRecordingError("No audio tracks to record — enable your microphone.");
       return;
     }
-    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+
+    // Video: canvas-composited tiles at ~4fps when supported.
+    const videoCapture = opts?.getVideoTiles ? buildVideoCapture(opts.getVideoTiles) : null;
+    if (videoCapture) mixed.addTrack(videoCapture.track);
+
+    const videoMime = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+    ].find((m) => MediaRecorder.isTypeSupported(m));
+    const audioMime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? "audio/webm;codecs=opus"
       : "";
-    const rec = new MediaRecorder(mixed, mime ? { mimeType: mime } : undefined);
+    const mime = videoCapture && videoMime ? videoMime : audioMime;
+
+    let rec: MediaRecorder;
+    try {
+      rec = new MediaRecorder(mixed, mime ? { mimeType: mime } : undefined);
+    } catch (error) {
+      videoCapture?.stop();
+      void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+      setRecordingStatus("error");
+      setRecordingError(
+        error instanceof Error ? error.message : "Couldn't start recording in this browser.",
+      );
+      return;
+    }
     chunksRef.current = [];
-    const startedAt = Date.now();
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     rec.onstop = () => {
       recorderRef.current = null;
+      videoCaptureRef.current = null;
+      videoCapture?.stop();
       const blob = new Blob(chunksRef.current, { type: mime || "audio/webm" });
       if (blob.size === 0) {
         setRecordingStatus("error");
@@ -814,16 +943,49 @@ export function useCallRoom(code: string, name: string) {
     };
     rec.start();
     recorderRef.current = rec;
+    if (videoCapture) videoCaptureRef.current = videoCapture;
     setRecording(true);
+    setRecordingPaused(false);
     setRecordingStatus("recording");
     setRecordingError(null);
-  }, [code, generateUploadUrl, saveRecording, transcribeMeeting]);
+  }, [
+    code,
+    clientId,
+    name,
+    opts?.getVideoTiles,
+    generateUploadUrl,
+    saveRecording,
+    setRecordingState,
+    transcribeMeeting,
+  ]);
+
+  const pauseRecording = useCallback(() => {
+    const rec = recorderRef.current;
+    if (!rec || rec.state !== "recording") return;
+    rec.pause();
+    setRecordingPaused(true);
+    void setRecordingState({ code, clientId, state: { active: true, paused: true } }).catch(
+      () => {},
+    );
+  }, [code, clientId, setRecordingState]);
+
+  const resumeRecording = useCallback(() => {
+    const rec = recorderRef.current;
+    if (!rec || rec.state !== "paused") return;
+    rec.resume();
+    setRecordingPaused(false);
+    void setRecordingState({ code, clientId, state: { active: true, paused: false } }).catch(
+      () => {},
+    );
+  }, [code, clientId, setRecordingState]);
 
   const stopRecording = useCallback(() => {
     if (!recorderRef.current) return;
     recorderRef.current.stop();
     setRecording(false);
-  }, []);
+    setRecordingPaused(false);
+    void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+  }, [code, clientId, setRecordingState]);
 
   return {
     clientId,
@@ -861,9 +1023,14 @@ export function useCallRoom(code: string, name: string) {
     interimCaption,
     captionError,
     recording,
+    recordingPaused,
     recordingStatus,
     recordingError,
+    recordingState,
+    isRecordingStarter: recordingState?.byClientId === clientId,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     kicked,
     endedByHost,

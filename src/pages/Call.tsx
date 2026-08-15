@@ -36,9 +36,11 @@ import {
   Minimize2,
   MonitorUp,
   MoreVertical,
+  Pause,
   PenLine,
   PhoneOff,
   PictureInPicture2,
+  Play,
   Radio,
   RefreshCw,
   Send,
@@ -65,6 +67,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PollsPanel } from "@/components/PollsPanel";
 import { QAPanel } from "@/components/QAPanel";
 import { AgendaPanel } from "@/components/AgendaPanel";
@@ -102,9 +114,11 @@ function useElapsed(start: number | null) {
 function VideoSurface({
   stream,
   className,
+  peer,
 }: {
   stream: MediaStream | null;
   className?: string;
+  peer?: string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -115,6 +129,7 @@ function VideoSurface({
   return (
     <video
       ref={ref}
+      data-peer={peer}
       autoPlay
       playsInline
       muted
@@ -172,6 +187,7 @@ export default function Call() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [copied, setCopied] = useState(false);
@@ -185,7 +201,12 @@ export default function Call() {
   const reduceMotion = useReducedMotion();
   const burstId = useRef(0);
 
-  const call = useCallRoom(code, displayName);
+  const call = useCallRoom(code, displayName, {
+    getVideoTiles: () =>
+      Array.from(document.querySelectorAll<HTMLVideoElement>("video[data-peer]")).map(
+        (el) => ({ id: el.dataset.peer ?? "", el }),
+      ),
+  });
   const lockMeeting = useMutation(api.meetings.lockMeeting);
   const endMeeting = useMutation(api.meetings.endMeeting);
 
@@ -215,6 +236,7 @@ export default function Call() {
   }, [settings, entered]);
 
   const elapsed = useElapsed(call.joinedAt);
+  const recElapsed = useElapsed(call.recordingState?.startedAt ?? null);
   const isMissing = room !== undefined && room === null;
   const isChecking = room === undefined;
 
@@ -252,8 +274,10 @@ export default function Call() {
   useEffect(() => {
     if (call.recordingError) {
       toast.warning(call.recordingError);
+    } else if (call.recordingStatus === "ready") {
+      toast.success("Recording saved — transcription is processing.");
     }
-  }, [call.recordingError]);
+  }, [call.recordingError, call.recordingStatus]);
 
   // ---- live caption translation (server-side via ai.translateText) ----
   const translateText = useAction(api.ai.translateText);
@@ -560,19 +584,30 @@ export default function Call() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {/* recording status */}
-              {call.recording && (
+              {/* recording status — server-backed so EVERY participant sees it */}
+              {call.recordingState?.active === true && (
                 <button
                   type="button"
-                  onClick={() =>
-                    call.recording ? call.stopRecording() : void call.startRecording()
+                  onClick={
+                    call.isRecordingStarter ? () => setConfirmStop(true) : undefined
                   }
-                  title="Recording in progress — click to stop"
-                  aria-label="Stop recording"
+                  title={
+                    call.recordingState.paused
+                      ? "Recording paused"
+                      : call.isRecordingStarter
+                        ? "Recording in progress — click to stop"
+                        : `${call.recordingState.byName ?? "The host"} is recording this meeting`
+                  }
+                  aria-label="Recording in progress"
                   className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/25"
                 >
-                  <span className="size-1.5 animate-pulse rounded-full bg-red-400" />
-                  REC {elapsed}
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full bg-red-400",
+                      !call.recordingState.paused && "animate-pulse",
+                    )}
+                  />
+                  {call.recordingState.paused ? "REC paused" : `REC ${recElapsed}`}
                 </button>
               )}
 
@@ -792,6 +827,7 @@ export default function Call() {
                     name={displayName}
                     micOn={call.micOn}
                     sharing={call.sharing}
+                    peerId={call.clientId}
                   />
                 )}
 
@@ -884,7 +920,7 @@ export default function Call() {
                     <>
                       <div className="relative aspect-video">
                         {selfStream ? (
-                          <VideoSurface stream={selfStream} />
+                          <VideoSurface stream={selfStream} peer={call.clientId} />
                         ) : (
                           <Avatar name={displayName} />
                         )}
@@ -1076,22 +1112,61 @@ export default function Call() {
               <Captions className="size-5" />
             </ControlButton>
 
-            {/* recording */}
-            <ControlButton
-              active={call.recording}
-              activeClass="bg-red-500 text-white animate-pulse"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
-              onClick={() =>
-                call.recording ? call.stopRecording() : void call.startRecording()
-              }
-              label={call.recording ? "Stop recording" : "Record meeting"}
-            >
-              {call.recording ? (
-                <Square className="size-4" />
-              ) : (
-                <Radio className="size-5" />
-              )}
-            </ControlButton>
+            {/* recording — host/co-host only; everyone else sees the indicator */}
+            {isModerator && (
+              <div className="flex items-center">
+                {call.recordingState?.active === true ? (
+                  call.isRecordingStarter ? (
+                    <>
+                      <ControlButton
+                        active={call.recordingPaused}
+                        activeClass="bg-amber-400 text-black"
+                        inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                        onClick={
+                          call.recordingPaused
+                            ? call.resumeRecording
+                            : call.pauseRecording
+                        }
+                        label={call.recordingPaused ? "Resume recording" : "Pause recording"}
+                      >
+                        {call.recordingPaused ? (
+                          <Play className="size-5" />
+                        ) : (
+                          <Pause className="size-5" />
+                        )}
+                      </ControlButton>
+                      <ControlButton
+                        active
+                        activeClass="bg-red-500 text-white animate-pulse"
+                        inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                        onClick={() => setConfirmStop(true)}
+                        label="Stop recording"
+                      >
+                        <Square className="size-4" />
+                      </ControlButton>
+                    </>
+                  ) : (
+                    <span
+                      className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-[11px] font-medium text-red-300"
+                      title="The host is recording this meeting"
+                    >
+                      <span className="size-1.5 animate-pulse rounded-full bg-red-400" />
+                      REC
+                    </span>
+                  )
+                ) : (
+                  <ControlButton
+                    active={false}
+                    activeClass="bg-red-500 text-white animate-pulse"
+                    inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                    onClick={() => void call.startRecording()}
+                    label="Record meeting"
+                  >
+                    <Radio className="size-5" />
+                  </ControlButton>
+                )}
+              </div>
+            )}
 
             <ControlButton
               active={panel === "ai"}
@@ -1146,6 +1221,30 @@ export default function Call() {
             )}
           </div>
           </footer>
+
+          {/* ---------- confirm before stopping a recording ---------- */}
+          <AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
+            <AlertDialogContent className="border-white/10 bg-neutral-900 text-white">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Stop recording?</AlertDialogTitle>
+                <AlertDialogDescription className="text-neutral-400">
+                  The recording will be saved, processed, and transcribed
+                  automatically. This can't be undone once you stop.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10">
+                  Keep recording
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-500 text-white hover:bg-red-600"
+                  onClick={() => call.stopRecording()}
+                >
+                  Stop recording
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* ---------- side panels ---------- */}
           <AnimatePresence>
@@ -1440,15 +1539,17 @@ function SelfTile({
   name,
   micOn,
   sharing,
+  peerId,
 }: {
   stream: MediaStream | null;
   name: string;
   micOn: boolean;
   sharing: boolean;
+  peerId: string;
 }) {
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900/90 ring-1 ring-white/10 shadow-lg shadow-black/20">
-      {stream ? <VideoSurface stream={stream} /> : <Avatar name={name} />}
+      {stream ? <VideoSurface stream={stream} peer={peerId} /> : <Avatar name={name} />}
       <div className="absolute bottom-2.5 left-3 flex items-center gap-2">
         <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
           {name} {sharing ? "· presenting" : "(you)"}
@@ -1495,7 +1596,7 @@ function Tile({
       {camOff ? (
         <Avatar name={name} />
       ) : (
-        <VideoSurface stream={stream} />
+        <VideoSurface stream={stream} peer={peerId} />
       )}
       <div className="absolute bottom-2.5 left-3 flex items-center gap-1.5">
         <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
