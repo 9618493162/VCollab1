@@ -124,13 +124,32 @@ export const updateMeetingSettings = mutation({
   },
 });
 
-/** People held in the waiting room (host view). */
+/** People held in the waiting room (host/co-host view).
+ *
+ * The meeting page subscribes to this for every participant (guests included),
+ * so instead of throwing for non-moderators it returns an empty list — the
+ * UI already gates the waiting-room UI on host/co-host status. */
 export const listWaitingParticipants = query({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
-    await requireHostOrCoHost(ctx, code);
     const room = await getRoom(ctx, code);
     if (room === null) return [];
+
+    // Only the host (or a co-host currently in the room) can view the list.
+    const userId = await getAuthUserId(ctx);
+    let isModerator = userId !== null && room.createdBy === userId;
+    if (!isModerator && userId !== null) {
+      const settings = await getSettings(ctx, room.code);
+      if (settings) {
+        const rows = await ctx.db
+          .query("presence")
+          .withIndex("by_code", (q) => q.eq("code", room.code))
+          .collect();
+        const mine = rows.find((r) => r.userId === userId);
+        if (mine && settings.coHosts.includes(mine.clientId)) isModerator = true;
+      }
+    }
+    if (!isModerator) return [];
     const rows = await ctx.db
       .query("presence")
       .withIndex("by_code", (q) => q.eq("code", room.code))

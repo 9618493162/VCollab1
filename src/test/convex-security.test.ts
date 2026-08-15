@@ -154,4 +154,18 @@ describe("meeting security + waiting room (Meeting Room)", () => {
       other.mutation(api.security.makeCoHost, { code, clientId: "c9" }),
     ).rejects.toThrow("Only the host can do that");
   });
+
+  it("the waiting list returns [] for guests and non-hosts instead of throwing (guest join path)", async () => {
+    const t = makeTestClient();
+    const { code } = await hostRoom(t);
+
+    // The meeting page subscribes to this query for every participant, guests
+    // included — it must never error for them.
+    const otherId = await insertUser(t, "other@example.com", "Other");
+    const other = t.withIdentity({ subject: otherId });
+    expect(await other.query(api.security.listWaitingParticipants, { code })).toEqual([]);
+
+    // Fully anonymous visitor (no sign-in at all)
+    expect(await t.query(api.security.listWaitingParticipants, { code })).toEqual([]);
+  });
 });
