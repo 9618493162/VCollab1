@@ -56,6 +56,7 @@ import {
   X,
 } from "lucide-react";
 import { AIPanel } from "@/components/AIPanel";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { DeviceSettingsPanel } from "@/components/DeviceSettingsPanel";
 import { MeetingInfoModal } from "@/components/MeetingInfoModal";
 import { NotesTasksPanel } from "@/components/NotesTasksPanel";
@@ -635,6 +636,8 @@ export default function Call() {
               >
                 <Info className="size-4" />
               </button>
+
+              <ThemeToggle className="hidden sm:flex" />
 
               {/* view mode toggle */}
               <div className="hidden items-center rounded-full border border-border/60 bg-muted/50 p-0.5 md:flex">
