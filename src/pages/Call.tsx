@@ -596,7 +596,7 @@ export default function Call() {
                       ? "Recording paused"
                       : call.isRecordingStarter
                         ? "Recording in progress — click to stop"
-                        : `${call.recordingState.byName ?? "The host"} is recording this meeting`
+                        : `${call.recordingState.byName ?? "The host"} is recording this meeting${call.recordingState.mode === "cloud" ? " (cloud recording, keeps going if they leave)" : ""}`
                   }
                   aria-label="Recording in progress"
                   className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/25"
@@ -1118,23 +1118,27 @@ export default function Call() {
                 {call.recordingState?.active === true ? (
                   call.isRecordingStarter ? (
                     <>
-                      <ControlButton
-                        active={call.recordingPaused}
-                        activeClass="bg-amber-400 text-black"
-                        inactiveClass="bg-white/10 text-white hover:bg-white/20"
-                        onClick={
-                          call.recordingPaused
-                            ? call.resumeRecording
-                            : call.pauseRecording
-                        }
-                        label={call.recordingPaused ? "Resume recording" : "Pause recording"}
-                      >
-                        {call.recordingPaused ? (
-                          <Play className="size-5" />
-                        ) : (
-                          <Pause className="size-5" />
-                        )}
-                      </ControlButton>
+                      {/* LiveKit's room-composite egress has no pause; only
+                          local captures can be paused/resumed */}
+                      {call.recordingState?.mode !== "cloud" && (
+                        <ControlButton
+                          active={call.recordingPaused}
+                          activeClass="bg-amber-400 text-black"
+                          inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                          onClick={
+                            call.recordingPaused
+                              ? call.resumeRecording
+                              : call.pauseRecording
+                          }
+                          label={call.recordingPaused ? "Resume recording" : "Pause recording"}
+                        >
+                          {call.recordingPaused ? (
+                            <Play className="size-5" />
+                          ) : (
+                            <Pause className="size-5" />
+                          )}
+                        </ControlButton>
+                      )}
                       <ControlButton
                         active
                         activeClass="bg-red-500 text-white animate-pulse"
@@ -1148,7 +1152,11 @@ export default function Call() {
                   ) : (
                     <span
                       className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-[11px] font-medium text-red-300"
-                      title="The host is recording this meeting"
+                      title={
+                        call.recordingState?.mode === "cloud"
+                          ? "Cloud recording in progress — it keeps running even if the host leaves"
+                          : "The host is recording this meeting"
+                      }
                     >
                       <span className="size-1.5 animate-pulse rounded-full bg-red-400" />
                       REC

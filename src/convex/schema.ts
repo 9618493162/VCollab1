@@ -51,7 +51,9 @@ const schema = defineSchema(
       locked: v.optional(v.boolean()),
       // live recording state, broadcast to everyone in the call so nobody
       // records secretly. Only the host/co-host that started it may pause/
-      // resume/stop (enforced in convex/recording.ts).
+      // resume/stop (enforced in convex/recording.ts). `mode: "cloud"` means
+      // LiveKit egress is recording the room server-side (keeps recording
+      // even if the starter's tab closes); otherwise it's a local capture.
       recording: v.optional(
         v.object({
           active: v.boolean(),
@@ -59,6 +61,10 @@ const schema = defineSchema(
           startedAt: v.optional(v.number()),
           byClientId: v.optional(v.string()),
           byName: v.optional(v.string()),
+          egressId: v.optional(v.string()),
+          mode: v.optional(
+            v.union(v.literal("cloud"), v.literal("local")),
+          ),
         }),
       ),
     }).index("by_code", ["code"]).index("by_createdBy", ["createdBy"]),
@@ -237,15 +243,30 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_code", ["code"]),
 
-    // meeting recordings
+    // meeting recordings. Local captures upload to Convex storage
+    // (storageId + url); LiveKit cloud recordings have an egressId and get
+    // their url once the egress finishes uploading server-side.
     recordings: defineTable({
       code: v.string(),
-      storageId: v.id("_storage"),
-      url: v.string(),
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
       createdBy: v.id("users"),
       createdAt: v.number(),
       durationMs: v.optional(v.number()),
-    }).index("by_code", ["code"]),
+      egressId: v.optional(v.string()),
+      startedAt: v.optional(v.number()),
+      filename: v.optional(v.string()),
+      status: v.optional(
+        v.union(
+          v.literal("recording"),
+          v.literal("finalizing"),
+          v.literal("ready"),
+          v.literal("error"),
+        ),
+      ),
+    })
+      .index("by_code", ["code"])
+      .index("by_egress", ["egressId"]),
 
     // meeting files shared via Supabase Storage (metadata lives here, blobs in Supabase)
     sharedFiles: defineTable({

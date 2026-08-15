@@ -1,6 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
 import { normalizeCode } from "./rooms";
 
 /**
@@ -109,6 +114,16 @@ export const setRecordingState = mutation({
   },
 });
 
+async function findRecordingByEgress(
+  ctx: MutationCtx,
+  egressId: string,
+) {
+  return await ctx.db
+    .query("recordings")
+    .withIndex("by_egress", (q) => q.eq("egressId", egressId))
+    .first();
+}
+
 /** Live recording state for the room, or null when nobody is recording. */
 export const getRecordingState = query({
   args: { code: v.string() },
@@ -120,5 +135,137 @@ export const getRecordingState = query({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
     return room?.recording ?? null;
+  },
+});
+
+// ---- internal helpers for LiveKit cloud recordings (convex/livekit.ts) ----
+
+/** Mark the room as cloud-recording and create the pending recordings row. */
+export const startCloudRecording = internalMutation({
+  args: {
+    code: v.string(),
+    clientId: v.string(),
+    byName: v.string(),
+    egressId: v.string(),
+    startedAt: v.number(),
+  },
+  handler: async (ctx, { code, clientId, byName, egressId, startedAt }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") throw new Error("Invalid meeting code.");
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (room === null) throw new Error("Meeting not found.");
+    await ctx.db.patch(room._id, {
+      recording: {
+        active: true,
+        paused: false,
+        startedAt,
+        byClientId: clientId,
+        byName,
+        egressId,
+        mode: "cloud",
+      },
+    });
+    await ctx.db.insert("recordings", {
+      code: normalized,
+      createdBy: room.createdBy,
+      createdAt: startedAt,
+      startedAt,
+      egressId,
+      status: "recording",
+    });
+  },
+});
+
+/** Clear the live recording state on the room doc. */
+export const clearRoomRecording = internalMutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return;
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (room) await ctx.db.patch(room._id, { recording: undefined });
+  },
+});
+
+/** The egress was told to stop; the file is still being finalized server-side. */
+export const markRecordingFinalizing = internalMutation({
+  args: { egressId: v.string() },
+  handler: async (ctx, { egressId }) => {
+    const row = await findRecordingByEgress(ctx, egressId);
+    if (row && row.status !== "ready" && row.status !== "error") {
+      await ctx.db.patch(row._id, { status: "finalizing" });
+    }
+  },
+});
+
+/** The egress finished; store the playback URL on the recordings row. */
+export const finalizeCloudRecording = internalMutation({
+  args: {
+    code: v.string(),
+    egressId: v.string(),
+    url: v.string(),
+    filename: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+  },
+  handler: async (ctx, { code, egressId, url, filename, durationMs }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return;
+    const row = await findRecordingByEgress(ctx, egressId);
+    if (row === null) return; // unknown egress — ignore (e.g. wiped test data)
+    await ctx.db.patch(row._id, {
+      status: "ready",
+      url: url || undefined,
+      filename,
+      durationMs,
+    });
+  },
+});
+
+/** The egress failed or was aborted; mark the row so the UI can say so. */
+export const failCloudRecording = internalMutation({
+  args: { egressId: v.string() },
+  handler: async (ctx, { egressId }) => {
+    const row = await findRecordingByEgress(ctx, egressId);
+    if (row) await ctx.db.patch(row._id, { status: "error" });
+  },
+});
+
+/**
+ * Entry point for LiveKit webhook events (egress_updated / egress_ended).
+ * Status arrives as an already-mapped "running" | "complete" | "error" so
+ * the http layer stays thin and this stays unit-testable.
+ */
+export const handleEgressEvent = internalMutation({
+  args: {
+    egressId: v.string(),
+    status: v.union(
+      v.literal("running"),
+      v.literal("complete"),
+      v.literal("error"),
+    ),
+    url: v.optional(v.string()),
+    filename: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+  },
+  handler: async (ctx, { egressId, status, url, filename, durationMs }) => {
+    if (status === "complete") {
+      const row = await findRecordingByEgress(ctx, egressId);
+      if (row === null) return;
+      await ctx.db.patch(row._id, {
+        status: "ready",
+        url: url || undefined,
+        filename,
+        durationMs,
+      });
+    } else if (status === "error") {
+      const row = await findRecordingByEgress(ctx, egressId);
+      if (row) await ctx.db.patch(row._id, { status: "error" });
+    }
   },
 });

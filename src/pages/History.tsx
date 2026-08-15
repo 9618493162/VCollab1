@@ -39,7 +39,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -386,6 +386,7 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
   const actionItems = useQuery(api.aiData.getAiData, { code, kind: "actionItems" });
   const minutes = useQuery(api.aiData.getAiData, { code, kind: "minutes" });
   const recordings = useQuery(api.call.listRecordings, { code });
+  const checkEgress = useAction(api.livekit.checkEgress);
   const summarize = useAction(api.ai.summarizeTranscript);
   const generateMinutes = useAction(api.ai.generateMinutes);
   const [generating, setGenerating] = useState(false);
@@ -420,6 +421,18 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
       setGeneratingMinutes(false);
     }
   };
+
+  // Cloud recordings finalize on LiveKit's servers — nudge any pending ones
+  // so the playback URL lands here without waiting for a webhook.
+  useEffect(() => {
+    const pending = recordings?.find(
+      (r) => r.egressId && r.status !== "ready" && r.status !== "error",
+    );
+    if (pending?.egressId) {
+      void checkEgress({ code, egressId: pending.egressId }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordings?.length]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -587,8 +600,23 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
                       {r.durationMs
                         ? ` · ${Math.round(r.durationMs / 60_000)}m ${Math.round((r.durationMs / 1000) % 60)}s`
                         : ""}
+                      {r.status === "recording" || r.status === "finalizing"
+                        ? " · processing"
+                        : ""}
                     </p>
-                    <audio controls src={r.url} className="h-9 w-full" />
+                    {r.url ? (
+                      <audio controls src={r.url} className="h-9 w-full" />
+                    ) : r.status === "error" ? (
+                      <p className="rounded-xl border border-dashed border-destructive/40 px-3 py-2 text-xs text-destructive">
+                        This recording failed to save.
+                      </p>
+                    ) : (
+                      <p className="flex items-center gap-2 rounded-xl border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">
+                        <Loader2 className="size-3.5 animate-spin" />
+                        Cloud recording is finalizing on the server — it will
+                        appear here when ready.
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>

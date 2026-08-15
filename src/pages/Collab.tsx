@@ -690,7 +690,12 @@ function AiTab({ code }: { code: string }) {
                 Recordings to transcribe
               </p>
               <ul className="mt-2 space-y-2">
-                {recordings?.map((r) => (
+                {/* only local captures (uploaded to Convex storage) can be
+                    transcribed — LiveKit cloud recordings are MP4s that stay
+                    on the cloud server */}
+                {(recordings ?? [])
+                  .filter((r) => r.storageId)
+                  .map((r) => (
                   <li key={r._id} className="flex items-center justify-between gap-3">
                     <span className="truncate text-xs text-muted-foreground">
                       {new Date(r.createdAt).toLocaleString()}
@@ -699,7 +704,7 @@ function AiTab({ code }: { code: string }) {
                       size="sm"
                       variant="outline"
                       className="shrink-0 rounded-full"
-                      onClick={() => handleTranscribe(r.storageId)}
+                      onClick={() => handleTranscribe(r.storageId!)}
                       disabled={busy !== null}
                     >
                       {busy === "transcribe" ? (

@@ -2,6 +2,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { Room, Track } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -192,6 +193,17 @@ export function useCallRoom(
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<{ track: MediaStreamTrack; stop: () => void } | null>(null);
 
+  // LiveKit cloud recording: while the room's recording state is a cloud
+  // recording, every participant publishes their tracks to the LiveKit room
+  // so the server-side egress captures everyone at full quality.
+  const lkRoomRef = useRef<Room | null>(null);
+  const lkConnectingRef = useRef(false);
+  const lkPublishedRef = useRef<{
+    audio?: MediaStreamTrack;
+    video?: MediaStreamTrack;
+    share?: MediaStreamTrack;
+  }>({});
+
   // ---- convex ----
   const joinRoom = useMutation(api.call.joinRoom);
   const leaveRoom = useMutation(api.call.leaveRoom);
@@ -206,6 +218,10 @@ export function useCallRoom(
   const transcribeMeeting = useAction(api.ai.transcribeMeeting);
   const recordingState = useQuery(api.recording.getRecordingState, joined ? { code } : "skip");
   const setRecordingState = useMutation(api.recording.setRecordingState);
+  const getParticipantToken = useAction(api.livekit.getParticipantToken);
+  const startRoomRecordingAction = useAction(api.livekit.startRoomRecording);
+  const stopRoomRecordingAction = useAction(api.livekit.stopRoomRecording);
+  const checkEgressAction = useAction(api.livekit.checkEgress);
 
   const signals = useQuery(api.call.listSignals, joined ? { code, to: clientId } : "skip");
   const participants = useQuery(api.call.listParticipants, joined ? { code } : "skip");
@@ -360,10 +376,19 @@ export function useCallRoom(
     if (!joinedRef.current) return;
     joinedRef.current = false;
     setJoined(false);
-    recorderRef.current?.stop();
-    videoCaptureRef.current?.stop();
-    videoCaptureRef.current = null;
-    void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+    // A cloud recording is owned by the LiveKit server — leaving must NOT stop
+    // it (egress keeps recording while anyone remains; it finalizes on its
+    // own once the room empties). Local capture dies with the tab, so stop it.
+    if (recordingState?.mode === "cloud") {
+      lkRoomRef.current?.disconnect();
+      lkRoomRef.current = null;
+      lkPublishedRef.current = {};
+    } else {
+      recorderRef.current?.stop();
+      videoCaptureRef.current?.stop();
+      videoCaptureRef.current = null;
+      void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+    }
     for (const pc of pcRef.current.values()) pc.close();
     pcRef.current.clear();
     streamRef.current.clear();
@@ -373,7 +398,8 @@ export function useCallRoom(
     setQuality({});
     setCaptionsEnabled(false);
     await leaveRoom({ code, clientId });
-  }, [code, clientId, leaveRoom, setRecordingState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, clientId, leaveRoom, setRecordingState, recordingState?.mode]);
 
   const handleSignal = useCallback(
     async (sig: Signal) => {
@@ -451,7 +477,15 @@ export function useCallRoom(
         recorderRef.current?.stop();
         videoCaptureRef.current?.stop();
         videoCaptureRef.current = null;
-        void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+        if (recordingState?.mode === "cloud") {
+          lkRoomRef.current?.disconnect();
+          lkRoomRef.current = null;
+          lkPublishedRef.current = {};
+          // best-effort: stop the egress server-side too
+          void stopRoomRecordingAction({ code, clientId }).catch(() => {});
+        } else {
+          void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+        }
         void leave();
       } else if (sig.kind === "mute") {
         // mute-all broadcasts to everyone; the sender skips themselves
@@ -669,13 +703,111 @@ export function useCallRoom(
       recorderRef.current?.stop();
       videoCaptureRef.current?.stop();
       videoCaptureRef.current = null;
+      // Don't kill a cloud recording when this tab closes — see `leave`.
+      if (lkRoomRef.current) {
+        lkRoomRef.current.disconnect();
+        lkRoomRef.current = null;
+        lkPublishedRef.current = {};
+      }
       if (joinedRef.current) void leaveRoom({ code, clientId });
-      void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+      if (recordingState?.mode !== "cloud") {
+        void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
+      }
       for (const pc of pcs.values()) pc.close();
       pcs.clear();
       streams.clear();
     };
-  }, [code, clientId, leaveRoom, setRecordingState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, clientId, leaveRoom, setRecordingState, recordingState?.mode]);
+
+  // ---- LiveKit cloud recording: publish our tracks to the recording room ----
+  const publishTracksToLiveKit = useCallback(async () => {
+    const lp = lkRoomRef.current?.localParticipant;
+    if (!lp) return;
+    const published = lkPublishedRef.current;
+    const publish = async (
+      track: MediaStreamTrack | undefined,
+      source: Track.Source,
+      key: "audio" | "video" | "share",
+    ) => {
+      const existing = published[key];
+      if (existing && existing !== track) {
+        try {
+          await lp.unpublishTrack(existing);
+        } catch {
+          // already unpublished
+        }
+        delete published[key];
+      }
+      if (track && existing !== track) {
+        try {
+          await lp.publishTrack(track, { source });
+          published[key] = track;
+        } catch {
+          // track may already be published / no longer valid
+        }
+      }
+    };
+    await publish(
+      localStreamRef.current?.getAudioTracks()[0],
+      Track.Source.Microphone,
+      "audio",
+    );
+    await publish(
+      camOn ? localStreamRef.current?.getVideoTracks()[0] : undefined,
+      Track.Source.Camera,
+      "video",
+    );
+    await publish(
+      sharing ? shareStreamRef.current?.getVideoTracks()[0] : undefined,
+      Track.Source.ScreenShare,
+      "share",
+    );
+  }, [camOn, sharing]);
+
+  const connectLiveKit = useCallback(async () => {
+    if (lkRoomRef.current || lkConnectingRef.current) return;
+    lkConnectingRef.current = true;
+    try {
+      const { url, token } = await getParticipantToken({ code, clientId, name });
+      const room = new Room({ adaptiveStream: false, dynacast: false });
+      await room.connect(url, token);
+      lkRoomRef.current = room;
+      await publishTracksToLiveKit();
+    } catch (error) {
+      // One participant failing to publish must not break the meeting.
+      setRecordingError(
+        error instanceof Error ? error.message : "Couldn't connect to the cloud recorder.",
+      );
+    } finally {
+      lkConnectingRef.current = false;
+    }
+  }, [clientId, code, getParticipantToken, name, publishTracksToLiveKit]);
+
+  const disconnectLiveKit = useCallback(() => {
+    const room = lkRoomRef.current;
+    if (!room) return;
+    room.disconnect();
+    lkRoomRef.current = null;
+    lkPublishedRef.current = {};
+  }, []);
+
+  // Everyone (including the starter) connects + publishes while a cloud
+  // recording is live, and disconnects when it stops.
+  useEffect(() => {
+    if (!joined) return;
+    if (recordingState?.active === true && recordingState?.mode === "cloud") {
+      void connectLiveKit();
+    } else {
+      disconnectLiveKit();
+    }
+  }, [joined, recordingState?.active, recordingState?.mode, connectLiveKit, disconnectLiveKit]);
+
+  // Start/stop presenting mid-recording: keep the recording's screen share in sync.
+  useEffect(() => {
+    if (!lkRoomRef.current) return;
+    void publishTracksToLiveKit();
+  }, [sharing, publishTracksToLiveKit]);
 
   const join = useCallback(async () => {
     if (joinedRef.current) return;
@@ -746,34 +878,39 @@ export function useCallRoom(
   }, [localStream, camOn]);
 
   /** Switch microphone / camera devices and push the new tracks to every peer. */
-  const setDevices = useCallback((devices: { audio?: string; video?: string }) => {
-    const constraints: MediaStreamConstraints = {
-      audio: devices.audio ? { deviceId: { exact: devices.audio } } : true,
-      video: devices.video
-        ? { deviceId: { exact: devices.video } }
-        : { width: 1280, height: 720 },
-    };
-    navigator.mediaDevices
-      .getUserMedia(constraints)
-      .then((stream) => {
-        const current = localStreamRef.current ?? new MediaStream();
-        localStreamRef.current = current;
-        const replacements: { kind: "audio" | "video"; track: MediaStreamTrack }[] = [];
-        for (const track of stream.getTracks()) {
-          current.getTracks().filter((t) => t.kind === track.kind).forEach((t) => t.stop());
-          current.addTrack(track);
-          replacements.push({ kind: track.kind as "audio" | "video", track });
-        }
-        setLocalStream(current);
-        for (const pc of pcRef.current.values()) {
-          for (const { kind, track } of replacements) {
-            const sender = pc.getSenders().find((s) => s.track?.kind === kind);
-            void sender?.replaceTrack(track);
+  const setDevices = useCallback(
+    (devices: { audio?: string; video?: string }) => {
+      const constraints: MediaStreamConstraints = {
+        audio: devices.audio ? { deviceId: { exact: devices.audio } } : true,
+        video: devices.video
+          ? { deviceId: { exact: devices.video } }
+          : { width: 1280, height: 720 },
+      };
+      navigator.mediaDevices
+        .getUserMedia(constraints)
+        .then((stream) => {
+          const current = localStreamRef.current ?? new MediaStream();
+          localStreamRef.current = current;
+          const replacements: { kind: "audio" | "video"; track: MediaStreamTrack }[] = [];
+          for (const track of stream.getTracks()) {
+            current.getTracks().filter((t) => t.kind === track.kind).forEach((t) => t.stop());
+            current.addTrack(track);
+            replacements.push({ kind: track.kind as "audio" | "video", track });
           }
-        }
-      })
-      .catch(() => setMediaError("Couldn't switch to the selected device."));
-  }, []);
+          setLocalStream(current);
+          for (const pc of pcRef.current.values()) {
+            for (const { kind, track } of replacements) {
+              const sender = pc.getSenders().find((s) => s.track?.kind === kind);
+              void sender?.replaceTrack(track);
+            }
+          }
+          // keep the cloud recording room in sync with the new tracks
+          if (lkRoomRef.current) void publishTracksToLiveKit();
+        })
+        .catch(() => setMediaError("Couldn't switch to the selected device."));
+    },
+    [publishTracksToLiveKit],
+  );
 
   const toggleHand = useCallback(() => {
     const next = !handRaisedRef.current;
@@ -837,12 +974,30 @@ export function useCallRoom(
     [clientId, code, name, sendReaction],
   );
 
-  // ---- recording: server-visible state + local capture ----
-  // Audio is a mix of local + all remote audio tracks. When the caller supplies
-  // rendered tile elements, we also composite self + remote video onto a canvas
-  // and capture that as the video track (falls back to audio-only otherwise).
+  // ---- recording: cloud-first (LiveKit egress), local capture fallback ----
+  // Cloud mode: the server starts a RoomComposite egress on LiveKit and
+  // broadcasts the state; this client (and every participant) then publishes
+  // mic/cam to the recording room so the egress captures everyone at full
+  // quality — server-side, so it keeps recording even if this tab closes.
   const startRecording = useCallback(async () => {
-    if (recorderRef.current) return;
+    if (recorderRef.current || lkRoomRef.current) return;
+    setRecordingStatus("recording");
+    setRecordingError(null);
+
+    try {
+      await startRoomRecordingAction({ code, clientId, name });
+      return; // recordingState flips active → the effect connects us to LiveKit
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!/livekit/i.test(message)) {
+        setRecordingStatus("error");
+        setRecordingError(message || "Couldn't start the recording.");
+        return;
+      }
+      // LiveKit isn't configured — fall back to a local capture (still
+      // broadcast to everyone via the room's recording state).
+      setRecordingError(null);
+    }
 
     // Claim the recording server-side first so every participant sees the
     // indicator immediately and only the host/co-host can start one.
@@ -957,9 +1112,12 @@ export function useCallRoom(
     saveRecording,
     setRecordingState,
     transcribeMeeting,
+    startRoomRecordingAction,
   ]);
 
   const pauseRecording = useCallback(() => {
+    // LiveKit's room-composite egress has no pause — only local captures pause.
+    if (recordingState?.mode === "cloud") return;
     const rec = recorderRef.current;
     if (!rec || rec.state !== "recording") return;
     rec.pause();
@@ -967,9 +1125,11 @@ export function useCallRoom(
     void setRecordingState({ code, clientId, state: { active: true, paused: true } }).catch(
       () => {},
     );
-  }, [code, clientId, setRecordingState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, clientId, setRecordingState, recordingState?.mode]);
 
   const resumeRecording = useCallback(() => {
+    if (recordingState?.mode === "cloud") return;
     const rec = recorderRef.current;
     if (!rec || rec.state !== "paused") return;
     rec.resume();
@@ -977,15 +1137,66 @@ export function useCallRoom(
     void setRecordingState({ code, clientId, state: { active: true, paused: false } }).catch(
       () => {},
     );
-  }, [code, clientId, setRecordingState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, clientId, setRecordingState, recordingState?.mode]);
 
   const stopRecording = useCallback(() => {
+    // Cloud: stop the egress server-side, then poll for the finished file.
+    if (recordingState?.mode === "cloud") {
+      const egressId = recordingState.egressId;
+      void (async () => {
+        try {
+          await stopRoomRecordingAction({ code, clientId });
+        } catch (error) {
+          setRecordingStatus("error");
+          setRecordingError(
+            error instanceof Error ? error.message : "Couldn't stop the recording.",
+          );
+          return;
+        }
+        setRecording(false);
+        if (!egressId) {
+          setRecordingStatus("ready");
+          return;
+        }
+        // The MP4 takes a moment to finalize + upload on LiveKit's side.
+        for (let attempt = 0; attempt < 45; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+          try {
+            const result = await checkEgressAction({ code, egressId });
+            if (result.status === "ready" || result.status === "error") {
+              setRecordingStatus(result.status);
+              if (result.status === "error") {
+                setRecordingError("The cloud recording failed to save.");
+              }
+              return;
+            }
+          } catch {
+            // transient — keep polling
+          }
+        }
+        setRecordingStatus("ready");
+        setRecordingError(
+          "The recording is still finalizing in the background — it will appear in the meeting's Recordings tab.",
+        );
+      })();
+      return;
+    }
+    // Local fallback
     if (!recorderRef.current) return;
     recorderRef.current.stop();
     setRecording(false);
     setRecordingPaused(false);
     void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
-  }, [code, clientId, setRecordingState]);
+  }, [
+    code,
+    clientId,
+    recordingState?.mode,
+    recordingState?.egressId,
+    stopRoomRecordingAction,
+    checkEgressAction,
+    setRecordingState,
+  ]);
 
   return {
     clientId,
