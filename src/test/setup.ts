@@ -12,6 +12,16 @@ afterEach(() => {
 // (e.g. the meeting chat) call it in effects. Stub it so tests don't throw.
 Element.prototype.scrollIntoView = () => {};
 
+// jsdom doesn't implement the Pointer Capture API, but Radix Select calls
+// target.hasPointerCapture on pointerdown and throws if it's missing — which
+// prevents the dropdown from opening in tests. Stub it like the other jsdom
+// gaps above.
+if (typeof Element.prototype.hasPointerCapture !== "function") {
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+}
+
 // jsdom doesn't implement IntersectionObserver, but framer-motion's
 // whileInView features construct one on mount (e.g. the Landing page).
 class IntersectionObserverStub {

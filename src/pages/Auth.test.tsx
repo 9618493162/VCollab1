@@ -40,6 +40,7 @@ describe("Auth page", () => {
   beforeEach(() => {
     useAuthMock.mockReturnValue(baseAuth);
     useConvexMock.mockReturnValue({ query: vi.fn(() => Promise.resolve(false)) });
+    baseAuth.signIn.mockClear();
   });
 
   it("sign-in mode welcomes the user back", () => {
@@ -101,6 +102,19 @@ describe("Auth page", () => {
     expect(screen.getByRole("button", { name: /^continue$/i })).toBeDisabled();
     await user.click(signInInstead);
     expect(screen.getByText("Welcome back")).toBeInTheDocument();
+  });
+
+  it("starts the GitHub OAuth flow with the intended redirect destination", async () => {
+    const user = userEvent.setup();
+    renderAuth();
+
+    const githubButton = screen.getByRole("button", { name: /continue with github/i });
+    expect(githubButton).toBeInTheDocument();
+    await user.click(githubButton);
+
+    expect(baseAuth.signIn).toHaveBeenCalledWith("github", {
+      redirectTo: "/dashboard",
+    });
   });
 
   it("persists the entered name via the real profile mutation after the code is verified", async () => {

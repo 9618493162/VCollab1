@@ -3,6 +3,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -10,14 +11,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Bell,
   Check,
   Clock,
+  ExternalLink,
+  Github,
   Globe,
+  GitPullRequestArrow,
   Loader2,
   Moon,
+  RefreshCw,
   Palette,
   Sun,
   User,
@@ -280,6 +285,9 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* ---------------- GitHub ---------------- */}
+          <GitHubSection />
+
           {/* ---------------- Language & timezone ---------------- */}
           <section className="glass rounded-2xl p-6 sm:p-7">
             <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
@@ -331,6 +339,249 @@ export default function SettingsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+function GitHubSection() {
+  const getProfile = useAction(api.github.getProfile);
+  const listRepos = useAction(api.github.listRepos);
+  const createIssue = useAction(api.github.createIssue);
+
+  const [status, setStatus] = useState<
+    "loading" | "connected" | "unconfigured" | "error"
+  >("loading");
+  const [profile, setProfile] = useState<Awaited<
+    ReturnType<typeof getProfile>
+  > | null>(null);
+  const [repos, setRepos] = useState<
+    { fullName: string; isPrivate: boolean; description: string | null }[]
+  >([]);
+  const [error, setError] = useState<string | null>(null);
+  const [repo, setRepo] = useState("");
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const refresh = async () => {
+    setStatus("loading");
+    setError(null);
+    try {
+      const p = await getProfile();
+      setProfile(p);
+      setStatus("connected");
+      try {
+        setRepos(await listRepos());
+      } catch {
+        setRepos([]);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("isn't connected")) {
+        setStatus("unconfigured");
+      } else {
+        setStatus("error");
+        setError(message);
+      }
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const createGitHubIssue = async () => {
+    if (!repo || title.trim().length < 3) {
+      toast.error("Pick a repository and enter an issue title.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const { number, htmlUrl } = await createIssue({
+        repo,
+        title,
+        body: body || undefined,
+      });
+      toast.success(`Issue #${number} created on GitHub.`, {
+        action: {
+          label: "Open",
+          onClick: () => window.open(htmlUrl, "_blank", "noopener,noreferrer"),
+        },
+      });
+      setTitle("");
+      setBody("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the issue.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <section className="glass rounded-2xl p-6 sm:p-7">
+      <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+        <Github className="size-4 text-primary" /> GitHub
+      </h2>
+
+      {status === "loading" && (
+        <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Checking GitHub connection…
+        </div>
+      )}
+
+      {status === "unconfigured" && (
+        <div className="mt-4 rounded-xl border border-border/60 bg-background/40 p-4 text-sm">
+          <p className="font-medium">GitHub isn't connected yet</p>
+          <p className="mt-1 text-muted-foreground">
+            Add a <span className="font-mono text-xs">GITHUB_TOKEN</span> in the
+            project's Keys tab (a classic fine-grained or repo-scoped token works).
+            Once it's set, this panel shows the connected account and you can
+            create issues from VCollab.
+          </p>
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="mt-3 rounded-full"
+          >
+            <a
+              href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="mr-1.5 size-3.5" />
+              GitHub token docs
+            </a>
+          </Button>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="mt-4 rounded-xl border border-border/60 bg-background/40 p-4 text-sm">
+          <p className="font-medium text-destructive">GitHub check failed</p>
+          <p className="mt-1 text-muted-foreground">{error}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3 rounded-full"
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className="mr-1.5 size-3.5" />
+            Try again
+          </Button>
+        </div>
+      )}
+
+      {status === "connected" && profile && (
+        <>
+          <div className="mt-4 flex items-center gap-3">
+            {profile.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt=""
+                className="size-11 rounded-full border border-border object-cover"
+              />
+            ) : (
+              <span className="flex size-11 items-center justify-center rounded-full bg-zinc-900 text-lg font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
+                {profile.name.trim()[0]?.toUpperCase() ?? "?"}
+              </span>
+            )}
+            <div className="min-w-0">
+              <a
+                href={profile.htmlUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate text-sm font-semibold transition-colors hover:text-primary"
+              >
+                {profile.name}
+              </a>
+              <p className="truncate text-xs text-muted-foreground">
+                @{profile.login} · {profile.publicRepos} public repos
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-border/60 pt-5">
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              <GitPullRequestArrow className="size-4 text-primary" />
+              Create a GitHub issue
+            </h3>
+            <div className="mt-3 grid gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Repository
+                </label>
+                <Select value={repo} onValueChange={setRepo}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="owner/repo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repos.length === 0 && (
+                      <SelectItem value="__none__" disabled>
+                        No accessible repositories
+                      </SelectItem>
+                    )}
+                    {repos.map((r) => (
+                      <SelectItem key={r.fullName} value={r.fullName}>
+                        {r.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label
+                  htmlFor="github-issue-title"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Title
+                </label>
+                <Input
+                  id="github-issue-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Meeting follow-up: …"
+                  className="mt-1.5"
+                  maxLength={200}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="github-issue-body"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Description
+                </label>
+                <Textarea
+                  id="github-issue-body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="Context, action items, links…"
+                  className="mt-1.5 min-h-20 resize-y"
+                  maxLength={4000}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => void createGitHubIssue()}
+                  disabled={creating || !repo || title.trim().length < 3}
+                >
+                  {creating ? (
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  ) : (
+                    <GitPullRequestArrow className="mr-1.5 size-3.5" />
+                  )}
+                  {creating ? "Creating…" : "Create issue"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

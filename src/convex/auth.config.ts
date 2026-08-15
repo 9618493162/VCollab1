@@ -22,6 +22,12 @@ export default {
       domain: process.env.CONVEX_SITE_URL!,
       applicationID: "convex",
     },
+    // GitHub OAuth ("Continue with GitHub"). applicationID is the provider id
+    // used in convexAuth's providers array.
+    {
+      domain: "github.com",
+      applicationID: "github",
+    },
     {
       type: "customJwt",
       issuer: freebuffIssuer,

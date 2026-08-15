@@ -18,7 +18,7 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useConvex, useMutation } from "convex/react";
-import { ArrowRight, Loader2, Mail, User, UserX } from "lucide-react";
+import { ArrowRight, Github, Loader2, Mail, User, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -193,6 +193,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
+  const handleGitHubLogin = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Starts the real GitHub OAuth flow; lands back on `redirect` after auth.
+      await signIn("github", { redirectTo: redirect });
+    } catch (error) {
+      console.error("GitHub login error:", error);
+      setError(
+        "GitHub sign-in isn't configured yet — use email or continue as guest.",
+      );
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden">
       {/* ambient background */}
@@ -299,16 +314,28 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         </div>
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="mt-4 h-11 w-full rounded-xl"
-                        onClick={handleGuestLogin}
-                        disabled={isLoading}
-                      >
-                        <UserX className="mr-2 h-4 w-4" />
-                        Continue as Guest
-                      </Button>
+                      <div className="mt-4 grid gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 w-full rounded-xl"
+                          onClick={() => void handleGitHubLogin()}
+                          disabled={isLoading}
+                        >
+                          <Github className="mr-2 h-4 w-4" />
+                          Continue with GitHub
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-11 w-full rounded-xl"
+                          onClick={() => void handleGuestLogin()}
+                          disabled={isLoading}
+                        >
+                          <UserX className="mr-2 h-4 w-4" />
+                          Continue as Guest
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </form>
