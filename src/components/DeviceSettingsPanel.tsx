@@ -146,15 +146,15 @@ export function DeviceSettingsPanel({
 
   const picker = (label: string, icon: React.ReactNode, value: string, options: Device[], onChange: (v: string) => void) => (
     <label className="block">
-      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-400">
+      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         {icon}
         {label}
       </span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-9 w-full rounded-lg border-white/10 bg-white/5 text-sm text-white">
+        <SelectTrigger className="h-9 w-full rounded-lg border-border/60 bg-muted/50 text-sm text-foreground">
           <SelectValue placeholder="Select device" />
         </SelectTrigger>
-        <SelectContent className="border-white/10 bg-neutral-900 text-white">
+        <SelectContent className="border-border/60 bg-muted/60 text-foreground">
           {options.map((d) => (
             <SelectItem key={d.deviceId} value={d.deviceId}>
               {d.label}
@@ -166,13 +166,13 @@ export function DeviceSettingsPanel({
   );
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/95 backdrop-blur-md">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="text-sm font-medium">Device settings</p>
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close device settings"
         >
           <X className="size-4" />
@@ -180,16 +180,16 @@ export function DeviceSettingsPanel({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-black">
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-black">
           <video ref={previewRef} muted playsInline className="aspect-video w-full object-cover" />
           {!camId && (
-            <p className="px-3 py-6 text-center text-xs text-neutral-500">
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground/70">
               No camera detected.
             </p>
           )}
         </div>
         {previewError && (
-          <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
             {previewError}
           </p>
         )}
@@ -205,7 +205,7 @@ export function DeviceSettingsPanel({
             variant="outline"
             size="sm"
             onClick={testMic}
-            className="flex-1 border-white/10 text-xs text-white hover:bg-white/10"
+            className="flex-1 border-border/60 text-xs text-foreground hover:bg-muted"
           >
             <Mic className="mr-1.5 size-3.5" /> Test mic
           </Button>
@@ -214,18 +214,18 @@ export function DeviceSettingsPanel({
             variant="outline"
             size="sm"
             onClick={testSpeaker}
-            className="flex-1 border-white/10 text-xs text-white hover:bg-white/10"
+            className="flex-1 border-border/60 text-xs text-foreground hover:bg-muted"
           >
             <Volume2 className="mr-1.5 size-3.5" /> Test speaker
           </Button>
         </div>
 
         <div>
-          <div className="mb-1.5 flex items-center justify-between text-xs text-neutral-400">
+          <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
             <span>Microphone level</span>
             <span className="tabular-nums">{level}%</span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted/80">
             <div
               className="h-full rounded-full bg-emerald-400 transition-all duration-100"
               style={{ width: `${level}%` }}
@@ -234,11 +234,11 @@ export function DeviceSettingsPanel({
         </div>
       </div>
 
-      <div className="flex shrink-0 gap-2 border-t border-white/10 p-3">
+      <div className="flex shrink-0 gap-2 border-t border-border/60 p-3">
         <Button
           type="button"
           variant="outline"
-          className="flex-1 border-white/10 text-white hover:bg-white/10"
+          className="flex-1 border-border/60 text-foreground hover:bg-muted"
           onClick={onClose}
         >
           Cancel

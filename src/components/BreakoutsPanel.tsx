@@ -106,15 +106,15 @@ export function BreakoutsPanel({
   };
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/95 backdrop-blur-md">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="flex items-center gap-2 text-sm font-medium">
           <Users className="size-4" /> Breakouts
         </p>
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close breakouts"
         >
           <X className="size-4" />
@@ -123,12 +123,12 @@ export function BreakoutsPanel({
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {session === null ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-            <Users className="mx-auto size-6 text-neutral-500" />
-            <p className="mt-2 text-sm text-neutral-300">
+          <div className="rounded-xl border border-border/60 bg-muted/50 p-4 text-center">
+            <Users className="mx-auto size-6 text-muted-foreground/70" />
+            <p className="mt-2 text-sm text-muted-foreground">
               {isHost ? "Split the call into smaller groups." : "Breakout rooms aren't running."}
             </p>
-            <p className="mt-1 text-[11px] text-neutral-500">
+            <p className="mt-1 text-[11px] text-muted-foreground/70">
               {isHost
                 ? "Create a room to start a breakout session."
                 : "The host can start one at any time."}
@@ -150,15 +150,15 @@ export function BreakoutsPanel({
         ) : session.active ? (
           <>
             {/* timer */}
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-muted/50 px-3 py-2">
               <div className="flex items-center gap-2">
-                <Timer className="size-3.5 text-neutral-400" />
+                <Timer className="size-3.5 text-muted-foreground" />
                 {timerRunning ? (
-                  <span className="text-sm font-medium tabular-nums text-white">
+                  <span className="text-sm font-medium tabular-nums text-foreground">
                     {formatCountdown(remaining)}
                   </span>
                 ) : (
-                  <span className="text-[11px] text-neutral-500">
+                  <span className="text-[11px] text-muted-foreground/70">
                     {session.timerEndsAt ? "Timer done" : "No timer"}
                   </span>
                 )}
@@ -170,13 +170,13 @@ export function BreakoutsPanel({
                     onChange={(e) => setTimerMinutes(e.target.value.replace(/[^0-9]/g, ""))}
                     placeholder="min"
                     aria-label="Timer minutes"
-                    className="h-7 w-11 rounded-md border border-white/10 bg-white/5 px-1.5 text-center text-xs text-white outline-none placeholder:text-neutral-600 focus:border-white/30"
+                    className="h-7 w-11 rounded-md border border-border/60 bg-muted/50 px-1.5 text-center text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary/50"
                   />
                   {timerRunning || session.timerEndsAt ? (
                     <button
                       type="button"
                       onClick={() => void clearBreakoutTimer({ code })}
-                      className="h-7 rounded-md px-1.5 text-[10px] text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+                      className="h-7 rounded-md px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       Clear
                     </button>
@@ -193,7 +193,7 @@ export function BreakoutsPanel({
                           toast.error(error instanceof Error ? error.message : "Couldn't start the timer."),
                         );
                       }}
-                      className="h-7 rounded-md px-1.5 text-[10px] text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+                      className="h-7 rounded-md px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       Start
                     </button>
@@ -213,14 +213,14 @@ export function BreakoutsPanel({
                       toast.error(error instanceof Error ? error.message : "Couldn't add a room."),
                     )
                   }
-                  className="w-full rounded-full border-white/10 text-white hover:bg-white/10"
+                  className="w-full rounded-full border-border/60 text-foreground hover:bg-muted"
                 >
                   <Plus className="size-3.5" /> Add room
                 </Button>
               )}
 
               {rooms.length === 0 ? (
-                <p className="pt-4 text-center text-xs text-neutral-500">
+                <p className="pt-4 text-center text-xs text-muted-foreground/70">
                   No rooms yet — add one to get going.
                 </p>
               ) : (
@@ -231,8 +231,8 @@ export function BreakoutsPanel({
                     <div
                       key={room._id}
                       className={cn(
-                        "rounded-xl border bg-white/5",
-                        inRoom ? "border-indigo-400/50" : "border-white/10",
+                        "rounded-xl border bg-muted/50",
+                        inRoom ? "border-indigo-400/50" : "border-border/60",
                       )}
                     >
                       <div className="flex items-center gap-2 px-3 py-2.5">
@@ -243,17 +243,17 @@ export function BreakoutsPanel({
                         >
                           <ChevronDown
                             className={cn(
-                              "size-3.5 shrink-0 text-neutral-500 transition-transform",
+                              "size-3.5 shrink-0 text-muted-foreground/70 transition-transform",
                               expanded ? "rotate-180" : "-rotate-90",
                             )}
                           />
-                          <span className="truncate text-sm font-medium text-white">{room.name}</span>
-                          <span className="shrink-0 text-[10px] tabular-nums text-neutral-500">
+                          <span className="truncate text-sm font-medium text-foreground">{room.name}</span>
+                          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
                             {room.members.length}
                           </span>
                         </button>
                         {inRoom ? (
-                          <span className="flex shrink-0 items-center gap-1 rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
+                          <span className="flex shrink-0 items-center gap-1 rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:text-indigo-300">
                             <DoorOpen className="size-3" /> Here
                           </span>
                         ) : (
@@ -265,7 +265,7 @@ export function BreakoutsPanel({
                                   toast.error(error instanceof Error ? error.message : "Couldn't join."),
                               )
                             }
-                            className="shrink-0 rounded-full border border-white/15 px-2.5 py-0.5 text-[10px] text-neutral-200 transition-colors hover:bg-white/10"
+                            className="shrink-0 rounded-full border border-border/70 px-2.5 py-0.5 text-[10px] text-foreground transition-colors hover:bg-muted"
                           >
                             Join
                           </button>
@@ -279,7 +279,7 @@ export function BreakoutsPanel({
                               )
                             }
                             aria-label={`Delete ${room.name}`}
-                            className="shrink-0 rounded p-0.5 text-neutral-600 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                            className="shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-red-500/20 hover:text-red-600 dark:text-red-400"
                           >
                             <Trash2 className="size-3" />
                           </button>
@@ -291,7 +291,7 @@ export function BreakoutsPanel({
                           {room.members.map((m) => (
                             <span
                               key={m.clientId}
-                              className="flex size-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/25 to-violet-500/25 text-[10px] font-semibold text-indigo-200"
+                              className="flex size-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/25 to-violet-500/25 text-[10px] font-semibold text-indigo-600 dark:text-indigo-300"
                               title={m.name}
                             >
                               {m.name.trim()[0]?.toUpperCase()}
@@ -301,17 +301,17 @@ export function BreakoutsPanel({
                       )}
 
                       {expanded && (
-                        <div className="border-t border-white/10 px-3 py-2.5">
+                        <div className="border-t border-border/60 px-3 py-2.5">
                           <div className="max-h-36 space-y-1.5 overflow-y-auto">
                             {roomMessages === undefined ? (
-                              <p className="text-[11px] text-neutral-500">Loading…</p>
+                              <p className="text-[11px] text-muted-foreground/70">Loading…</p>
                             ) : roomMessages.length === 0 ? (
-                              <p className="text-[11px] text-neutral-500">No messages yet.</p>
+                              <p className="text-[11px] text-muted-foreground/70">No messages yet.</p>
                             ) : (
                               roomMessages.map((m) => (
                                 <div key={m._id} className="text-[11px]">
-                                  <span className="font-medium text-neutral-300">{m.name}: </span>
-                                  <span className="text-neutral-400">{m.text}</span>
+                                  <span className="font-medium text-muted-foreground">{m.name}: </span>
+                                  <span className="text-muted-foreground">{m.text}</span>
                                 </div>
                               ))
                             )}
@@ -325,13 +325,13 @@ export function BreakoutsPanel({
                                 }
                                 onKeyDown={(e) => e.key === "Enter" && void sendRoomMessage(room._id)}
                                 placeholder="Message this room…"
-                                className="h-8 border-white/10 bg-white/5 text-xs text-white placeholder:text-neutral-600"
+                                className="h-8 border-border/60 bg-muted/50 text-xs text-foreground placeholder:text-muted-foreground/70"
                               />
                               <button
                                 type="button"
                                 onClick={() => void sendRoomMessage(room._id)}
                                 aria-label="Send room message"
-                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                               >
                                 <Send className="size-3.5" />
                               </button>
@@ -347,19 +347,19 @@ export function BreakoutsPanel({
 
             {/* host: assign participants */}
             {isHost && participants.length > 0 && (
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+              <div className="rounded-xl border border-border/60 bg-muted/50 p-3">
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
                   Participants
                 </p>
                 <div className="max-h-44 space-y-1 overflow-y-auto">
                   {participants.map((p) => (
                     <div key={p.clientId} className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-xs text-neutral-200">{p.name}</span>
+                      <span className="min-w-0 flex-1 truncate text-xs text-foreground">{p.name}</span>
                       <Select
                         value={p.roomId ?? "main"}
                         onValueChange={(roomId) => assign(roomId === "main" ? null : (roomId as Id<"breakoutRooms">), p)}
                       >
-                        <SelectTrigger className="h-7 w-28 border-white/10 bg-white/5 px-2 text-[10px] text-neutral-300">
+                        <SelectTrigger className="h-7 w-28 border-border/60 bg-muted/50 px-2 text-[10px] text-muted-foreground">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -389,16 +389,16 @@ export function BreakoutsPanel({
                     toast.error(error instanceof Error ? error.message : "Couldn't return to the main meeting."),
                   )
                 }
-                className="w-full rounded-full border-white/10 text-white hover:bg-white/10"
+                className="w-full rounded-full border-border/60 text-foreground hover:bg-muted"
               >
                 <LogOut className="size-3.5" /> Return to main meeting
               </Button>
             )}
           </>
         ) : (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-            <p className="text-sm text-neutral-300">Breakout rooms have ended.</p>
-            <p className="mt-1 text-[11px] text-neutral-500">
+          <div className="rounded-xl border border-border/60 bg-muted/50 p-4 text-center">
+            <p className="text-sm text-muted-foreground">Breakout rooms have ended.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground/70">
               Everyone is back in the main meeting.
             </p>
           </div>
@@ -406,7 +406,7 @@ export function BreakoutsPanel({
       </div>
 
       {isHost && session?.active === true && (
-        <div className="border-t border-white/10 p-3">
+        <div className="border-t border-border/60 p-3">
           <Button
             size="sm"
             variant="outline"
@@ -415,7 +415,7 @@ export function BreakoutsPanel({
                 toast.error(error instanceof Error ? error.message : "Couldn't end breakouts."),
               )
             }
-            className="w-full rounded-full border-red-500/40 text-red-300 hover:bg-red-500/15 hover:text-red-200"
+            className="w-full rounded-full border-red-500/40 text-red-600 dark:text-red-300 hover:bg-red-500/15 hover:text-red-600 dark:text-red-300"
           >
             <LogOut className="size-3.5" /> End breakout session
           </Button>

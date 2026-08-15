@@ -491,7 +491,7 @@ export default function Call() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-neutral-950 text-white">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* ambient glow */}
       <div className="pointer-events-none absolute -top-40 left-1/4 size-[500px] rounded-full bg-indigo-600/20 blur-[120px]" />
       <div className="pointer-events-none absolute -bottom-40 right-1/4 size-[400px] rounded-full bg-fuchsia-600/10 blur-[120px]" />
@@ -499,13 +499,13 @@ export default function Call() {
       {/* ---------- waiting room ---------- */}
       {call.waiting && (
         <div className="relative z-10 flex h-full flex-col items-center justify-center gap-5 p-6 text-center">
-          <div className="flex size-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-            <DoorOpen className="size-7 text-neutral-300" />
+          <div className="flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/50">
+            <DoorOpen className="size-7 text-muted-foreground" />
           </div>
           <div>
             <p className="font-display text-xl font-semibold">You're in the waiting room</p>
-            <p className="mt-1.5 max-w-sm text-sm text-neutral-400">
-              The host will let you into <span className="font-mono text-neutral-300">{code}</span>{" "}
+            <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
+              The host will let you into <span className="font-mono text-muted-foreground">{code}</span>{" "}
               shortly. Keep your mic and camera ready.
             </p>
           </div>
@@ -513,11 +513,11 @@ export default function Call() {
             <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />
             <span className="size-1.5 animate-pulse rounded-full bg-amber-400 [animation-delay:150ms]" />
             <span className="size-1.5 animate-pulse rounded-full bg-amber-400 [animation-delay:300ms]" />
-            <span className="ml-2 text-xs text-neutral-500">Waiting for the host…</span>
+            <span className="ml-2 text-xs text-muted-foreground/70">Waiting for the host…</span>
           </div>
           <Button
             variant="outline"
-            className="mt-2 border-white/10 text-white hover:bg-white/10"
+            className="mt-2 border-border/60 text-foreground hover:bg-muted"
             onClick={() => void handleLeave()}
           >
             Leave waiting room
@@ -528,7 +528,7 @@ export default function Call() {
       {!call.waiting && entered && (
         <>
           {/* ---------- top bar ---------- */}
-          <header className="relative z-10 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 backdrop-blur-md sm:px-6">
+          <header className="relative z-10 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-background/60 px-4 backdrop-blur-md sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -538,7 +538,7 @@ export default function Call() {
                 V<span className="text-gradient">Collab</span>
               </button>
               <span className="hidden size-1 rounded-full bg-emerald-400 sm:block" />
-              <span className="hidden text-xs font-medium text-emerald-400 sm:block">Live</span>
+              <span className="hidden text-xs font-medium text-emerald-600 dark:text-emerald-400 sm:block">Live</span>
 
               {editingTitle && isModerator ? (
                 <form
@@ -560,7 +560,7 @@ export default function Call() {
                       }
                     }}
                     placeholder="Meeting title"
-                    className="h-8 w-52 rounded-lg border-white/10 bg-white/10 text-sm text-white"
+                    className="h-8 w-52 rounded-lg border-border/60 bg-muted/60 text-sm text-foreground"
                     aria-label="Meeting title"
                   />
                 </form>
@@ -574,12 +574,12 @@ export default function Call() {
                   }}
                   title={isModerator ? "Rename meeting" : room?.title ?? "Untitled meeting"}
                   aria-label={isModerator ? "Rename meeting" : "Meeting title"}
-                  className="hidden max-w-[220px] truncate text-sm font-medium text-neutral-200 transition-colors sm:block sm:hover:text-white md:max-w-xs"
+                  className="hidden max-w-[220px] truncate text-sm font-medium text-foreground transition-colors sm:block sm:hover:text-foreground md:max-w-xs"
                 >
                   {room?.title || "Untitled meeting"}
                 </button>
               )}
-              <span className="hidden text-xs tabular-nums text-neutral-400 sm:block">
+              <span className="hidden text-xs tabular-nums text-muted-foreground sm:block">
                 {elapsed}
               </span>
             </div>
@@ -599,7 +599,7 @@ export default function Call() {
                         : `${call.recordingState.byName ?? "The host"} is recording this meeting${call.recordingState.mode === "cloud" ? " (cloud recording, keeps going if they leave)" : ""}`
                   }
                   aria-label="Recording in progress"
-                  className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/25"
+                  className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-[11px] font-medium text-red-600 dark:text-red-300 transition-colors hover:bg-red-500/25"
                 >
                   <span
                     className={cn(
@@ -619,8 +619,8 @@ export default function Call() {
                 className={cn(
                   "hidden size-8 items-center justify-center rounded-full transition-colors md:flex",
                   meetingSettings?.waitingRoom || room?.locked
-                    ? "text-amber-300 hover:bg-white/10"
-                    : "text-neutral-400 hover:bg-white/5 hover:text-white",
+                    ? "text-amber-600 dark:text-amber-300 hover:bg-muted"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Shield className="size-4" />
@@ -631,13 +631,13 @@ export default function Call() {
                 onClick={() => setShowInfo(true)}
                 title="Meeting information"
                 aria-label="Meeting information"
-                className="hidden size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/5 hover:text-white md:flex"
+                className="hidden size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:flex"
               >
                 <Info className="size-4" />
               </button>
 
               {/* view mode toggle */}
-              <div className="hidden items-center rounded-full border border-white/10 bg-white/5 p-0.5 md:flex">
+              <div className="hidden items-center rounded-full border border-border/60 bg-muted/50 p-0.5 md:flex">
                 {(
                   [
                     { id: "gallery", icon: LayoutGrid, label: "Gallery" },
@@ -653,7 +653,7 @@ export default function Call() {
                     aria-label={v.label}
                     className={cn(
                       "flex size-8 items-center justify-center rounded-full transition-colors",
-                      view === v.id ? "bg-white/15 text-white" : "text-neutral-400 hover:text-white",
+                      view === v.id ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     <v.icon className="size-4" />
@@ -664,7 +664,7 @@ export default function Call() {
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-white/10"
+                className="flex items-center gap-2 rounded-full border border-border/60 bg-muted/50 px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
               >
                 {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                 <span className="font-mono tracking-tight">{code}</span>
@@ -676,7 +676,7 @@ export default function Call() {
                     type="button"
                     aria-label="More meeting options"
                     title="More options"
-                    className="flex size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+                    className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <MoreVertical className="size-4" />
                   </button>
@@ -742,8 +742,8 @@ export default function Call() {
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors",
                   panel === "people"
-                    ? "bg-white/15 text-white"
-                    : "text-neutral-400 hover:bg-white/5 hover:text-white",
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Users className="size-3.5" />
@@ -761,10 +761,10 @@ export default function Call() {
           <main className="relative z-10 flex-1 overflow-hidden p-3 sm:p-4">
             {isMissing ? (
               <div className="flex h-full flex-col items-center justify-center text-center">
-                <p className="text-sm text-neutral-400">This meeting doesn't exist (yet).</p>
+                <p className="text-sm text-muted-foreground">This meeting doesn't exist (yet).</p>
                 <Button
                   variant="outline"
-                  className="mt-6 rounded-full border-white/20 text-white hover:bg-white/5"
+                  className="mt-6 rounded-full border-border text-foreground hover:bg-muted"
                   onClick={() => navigate("/dashboard")}
                 >
                   Back to meetings
@@ -774,7 +774,7 @@ export default function Call() {
               <div className="flex h-full flex-col items-center justify-center text-center">
                 {call.joinError ? (
                   <>
-                    <p className="max-w-sm text-sm text-red-300">{call.joinError}</p>
+                    <p className="max-w-sm text-sm text-red-600 dark:text-red-300">{call.joinError}</p>
                     <div className="mt-6 flex flex-col items-center gap-2 sm:flex-row">
                       <Button
                         onClick={() => void call.join()}
@@ -784,7 +784,7 @@ export default function Call() {
                       </Button>
                       <Button
                         variant="outline"
-                        className="h-11 rounded-full border-white/20 px-7 text-white hover:bg-white/5"
+                        className="h-11 rounded-full border-border px-7 text-foreground hover:bg-muted"
                         onClick={() => void handleLeave()}
                       >
                         Leave
@@ -793,8 +793,8 @@ export default function Call() {
                   </>
                 ) : (
                   <>
-                    <Loader2 className="size-6 animate-spin text-neutral-400" />
-                    <p className="mt-3 text-sm text-neutral-400">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                    <p className="mt-3 text-sm text-muted-foreground">
                       Connecting to meeting…
                     </p>
                   </>
@@ -863,7 +863,7 @@ export default function Call() {
                   .map((p) => (
                     <div
                       key={p.clientId}
-                      className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl bg-neutral-900 ring-1 ring-white/10"
+                      className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl bg-muted/60 ring-1 ring-black/10 dark:ring-white/10"
                     >
                       <Avatar name={p.name} />
                       <span className="absolute bottom-2.5 left-3 rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
@@ -880,10 +880,10 @@ export default function Call() {
                 {Object.keys(call.remoteStreams).length === 0 &&
                   call.participants?.length === 1 && (
                     <div className="col-span-full flex h-full min-h-[220px] flex-col items-center justify-center text-center">
-                      <p className="text-lg font-extralight text-neutral-300">
+                      <p className="text-lg font-extralight text-muted-foreground">
                         You're the first one here.
                       </p>
-                      <p className="mt-2 max-w-sm text-sm text-neutral-500">
+                      <p className="mt-2 max-w-sm text-sm text-muted-foreground/70">
                         Share the code to bring people in. Open the link in
                         another tab to test the call.
                       </p>
@@ -910,7 +910,7 @@ export default function Call() {
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
                   className={cn(
-                    "group overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-white/15 shadow-2xl",
+                    "group overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10 dark:ring-white/15 shadow-2xl",
                     selfMinimized ? "h-12 cursor-pointer" : "cursor-grab active:cursor-grabbing",
                   )}
                   style={{ height: selfMinimized ? undefined : selfSize.h }}
@@ -942,7 +942,7 @@ export default function Call() {
                       </button>
                     </>
                   ) : (
-                    <div className="flex h-12 items-center gap-2 px-3 text-xs text-neutral-300">
+                    <div className="flex h-12 items-center gap-2 px-3 text-xs text-muted-foreground">
                       <PictureInPicture2 className="size-4" />
                       {displayName}
                     </div>
@@ -1018,25 +1018,25 @@ export default function Call() {
                   </span>
                 )}
                 {translationNotice && (
-                  <span className="rounded-lg bg-amber-500/20 px-3 py-1 text-[11px] text-amber-200 backdrop-blur-sm">
+                  <span className="rounded-lg bg-amber-500/20 px-3 py-1 text-[11px] text-amber-600 dark:text-amber-200 backdrop-blur-sm">
                     {translationNotice}
                   </span>
                 )}
               </div>
             )}
             {call.captionError && (
-              <p className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-lg bg-amber-500/20 px-3 py-1 text-xs text-amber-200 backdrop-blur-sm">
+              <p className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-lg bg-amber-500/20 px-3 py-1 text-xs text-amber-600 dark:text-amber-200 backdrop-blur-sm">
                 {call.captionError}
               </p>
             )}
           </main>
 
           {/* ---------- control bar ---------- */}
-          <footer className="relative z-10 flex h-24 shrink-0 items-center justify-center px-3 pb-5">
-            <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-900/70 p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:gap-2">
+          <footer className="relative z-10 flex h-24 shrink-0 items-center justify-center px-2 pb-5 sm:px-3">
+            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-border/60 bg-background/80 p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:gap-2">
             <ControlButton
               active={call.micOn}
-              activeClass="bg-white text-black"
+              activeClass="bg-foreground text-background"
               inactiveClass="bg-red-500/90 text-white hover:bg-red-500"
               onClick={call.toggleMic}
               label={call.micOn ? "Turn off mic" : "Turn on mic"}
@@ -1046,8 +1046,8 @@ export default function Call() {
 
             <ControlButton
               active={call.camOn}
-              activeClass="bg-white text-black"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              activeClass="bg-foreground text-background"
+              inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
               onClick={call.toggleCam}
               label={call.camOn ? "Turn off camera" : "Turn on camera"}
             >
@@ -1056,8 +1056,8 @@ export default function Call() {
 
             <ControlButton
               active={call.sharing}
-              activeClass="bg-white text-black"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              activeClass="bg-foreground text-background"
+              inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
               onClick={() => void call.toggleShare()}
               label={call.sharing ? "Stop presenting" : "Present screen"}
             >
@@ -1067,7 +1067,7 @@ export default function Call() {
             <ControlButton
               active={call.handRaised}
               activeClass="bg-amber-400 text-black"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
               onClick={call.toggleHand}
               label={call.handRaised ? "Lower hand" : "Raise hand"}
             >
@@ -1078,21 +1078,21 @@ export default function Call() {
             <div className="relative">
               <ControlButton
                 active={showReactions}
-                activeClass="bg-white text-black"
-                inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                activeClass="bg-foreground text-background"
+                inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
                 onClick={() => setShowReactions((v) => !v)}
                 label="Reactions"
               >
                 <Sparkles className="size-5" />
               </ControlButton>
               {showReactions && (
-                <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 bg-neutral-900/85 p-2 shadow-2xl backdrop-blur-2xl">
+                <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-border/60 bg-background/90 p-2 shadow-2xl backdrop-blur-2xl">
                   {REACTION_EMOJIS.map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
                       onClick={() => fireBurst(emoji)}
-                      className="flex size-9 items-center justify-center rounded-xl text-xl transition-all hover:scale-125 hover:bg-white/10"
+                      className="flex size-9 items-center justify-center rounded-xl text-xl transition-all hover:scale-125 hover:bg-muted"
                     >
                       {emoji}
                     </button>
@@ -1104,8 +1104,8 @@ export default function Call() {
             {/* captions */}
             <ControlButton
               active={call.captionsEnabled}
-              activeClass="bg-white text-black"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              activeClass="bg-foreground text-background"
+              inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
               onClick={call.toggleCaptions}
               label="Live captions"
             >
@@ -1124,7 +1124,7 @@ export default function Call() {
                         <ControlButton
                           active={call.recordingPaused}
                           activeClass="bg-amber-400 text-black"
-                          inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                          inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
                           onClick={
                             call.recordingPaused
                               ? call.resumeRecording
@@ -1142,7 +1142,7 @@ export default function Call() {
                       <ControlButton
                         active
                         activeClass="bg-red-500 text-white animate-pulse"
-                        inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                        inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
                         onClick={() => setConfirmStop(true)}
                         label="Stop recording"
                       >
@@ -1151,7 +1151,7 @@ export default function Call() {
                     </>
                   ) : (
                     <span
-                      className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-[11px] font-medium text-red-300"
+                      className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-[11px] font-medium text-red-600 dark:text-red-300"
                       title={
                         call.recordingState?.mode === "cloud"
                           ? "Cloud recording in progress — it keeps running even if the host leaves"
@@ -1166,7 +1166,7 @@ export default function Call() {
                   <ControlButton
                     active={false}
                     activeClass="bg-red-500 text-white animate-pulse"
-                    inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                    inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
                     onClick={() => void call.startRecording()}
                     label="Record meeting"
                   >
@@ -1178,8 +1178,8 @@ export default function Call() {
 
             <ControlButton
               active={panel === "ai"}
-              activeClass="bg-white text-black"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              activeClass="bg-foreground text-background"
+              inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
               onClick={() => setPanel((p) => (p === "ai" ? "none" : "ai"))}
               label="AI assistant"
             >
@@ -1188,8 +1188,8 @@ export default function Call() {
 
             <ControlButton
               active={panel === "chat"}
-              activeClass="bg-white text-black"
-              inactiveClass="bg-white/10 text-white hover:bg-white/20"
+              activeClass="bg-foreground text-background"
+              inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
               onClick={() => setPanel((p) => (p === "chat" ? "none" : "chat"))}
               label="Chat"
             >
@@ -1197,11 +1197,11 @@ export default function Call() {
             </ControlButton>
 
             {isHost && (
-              <div className="ml-1 flex items-center gap-1.5 border-l border-white/10 pl-2">
+              <div className="ml-1 flex items-center gap-1.5 border-l border-border/60 pl-2">
                 <ControlButton
                   active={room?.locked === true}
-                  activeClass="bg-white text-black"
-                  inactiveClass="bg-white/10 text-white hover:bg-white/20"
+                  activeClass="bg-foreground text-background"
+                  inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
                   onClick={() => void handleLock(room?.locked !== true)}
                   label={room?.locked ? "Unlock meeting" : "Lock meeting"}
                 >
@@ -1209,7 +1209,7 @@ export default function Call() {
                 </ControlButton>
                 <Button
                   onClick={() => void handleEndForAll()}
-                  className="h-12 w-12 rounded-full bg-red-500 p-0 text-white hover:bg-red-600"
+                  className="ml-1 h-11 w-11 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-12 sm:w-12"
                   aria-label="End meeting for everyone"
                   title="End for everyone"
                 >
@@ -1221,7 +1221,7 @@ export default function Call() {
             {!isHost && (
               <Button
                 onClick={handleLeave}
-                className="ml-1 h-12 w-12 rounded-full bg-red-500 p-0 text-white hover:bg-red-600"
+                className="ml-1 h-11 w-11 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-12 sm:w-12"
                 aria-label="Leave meeting"
               >
                 <PhoneOff className="size-5" />
@@ -1232,16 +1232,16 @@ export default function Call() {
 
           {/* ---------- confirm before stopping a recording ---------- */}
           <AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
-            <AlertDialogContent className="border-white/10 bg-neutral-900 text-white">
+            <AlertDialogContent className="border-border/60">
               <AlertDialogHeader>
                 <AlertDialogTitle>Stop recording?</AlertDialogTitle>
-                <AlertDialogDescription className="text-neutral-400">
+                <AlertDialogDescription className="text-muted-foreground">
                   The recording will be saved, processed, and transcribed
                   automatically. This can't be undone once you stop.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10">
+                <AlertDialogCancel className="border-border/60">
                   Keep recording
                 </AlertDialogCancel>
                 <AlertDialogAction
@@ -1378,16 +1378,16 @@ export default function Call() {
           onClick={() => setShowShortcuts(false)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-5 shadow-2xl"
+            className="w-full max-w-sm rounded-2xl border border-border/60 bg-background p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-white">Keyboard shortcuts</p>
+              <p className="text-sm font-medium text-foreground">Keyboard shortcuts</p>
               <button
                 type="button"
                 onClick={() => setShowShortcuts(false)}
                 aria-label="Close shortcuts"
-                className="text-neutral-400 transition-colors hover:text-white"
+                className="text-muted-foreground transition-colors hover:text-foreground"
               >
                 <X className="size-4" />
               </button>
@@ -1405,14 +1405,14 @@ export default function Call() {
                 ["?", "Show this help"],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between text-xs">
-                  <span className="text-neutral-300">{label}</span>
-                  <kbd className="rounded-md border border-white/20 bg-white/10 px-2 py-0.5 font-mono text-[11px] text-white">
+                  <span className="text-muted-foreground">{label}</span>
+                  <kbd className="rounded-md border border-border bg-muted/60 px-2 py-0.5 font-mono text-[11px] text-foreground">
                     {key}
                   </kbd>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-[11px] text-neutral-500">
+            <p className="mt-4 text-[11px] text-muted-foreground/70">
               Shortcuts are ignored while you're typing.
             </p>
           </div>
@@ -1421,7 +1421,7 @@ export default function Call() {
 
       {/* ---------- PRE-JOIN ---------- */}
       {!entered && (
-        <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto bg-neutral-950 p-6">
+        <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto bg-background p-6">
           <div className="w-full max-w-md">
             <div className="flex items-center justify-between">
               <button
@@ -1435,7 +1435,7 @@ export default function Call() {
                 <button
                   type="button"
                   onClick={() => void signOut().then(() => navigate("/"))}
-                  className="flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-white"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground/70 transition-colors hover:text-foreground"
                 >
                   <LogOut className="size-3.5" />
                   Sign out
@@ -1443,19 +1443,19 @@ export default function Call() {
               ) : (
                 <Link
                   to={`/auth?returnTo=/call/${code}`}
-                  className="flex items-center gap-1.5 rounded-full border border-white/10 px-4 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-white/5"
+                  className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
                 >
                   Sign in to keep meetings
                 </Link>
               )}
             </div>
 
-            <p className="mt-10 text-[11px] font-medium uppercase tracking-[0.3em] text-neutral-500">
+            <p className="mt-10 text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground/70">
               Ready to join?
             </p>
-            <p className="mt-2 font-mono text-sm tracking-tight text-neutral-300">{code}</p>
+            <p className="mt-2 font-mono text-sm tracking-tight text-muted-foreground">{code}</p>
 
-            <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900 ring-1 ring-white/10">
+            <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-2xl bg-muted/60 ring-1 ring-black/10 dark:ring-white/10">
               {call.localStream ? (
                 <VideoSurface stream={call.localStream} />
               ) : (
@@ -1467,7 +1467,7 @@ export default function Call() {
             </div>
 
             {call.mediaError && (
-              <p className="mt-3 text-xs text-amber-400/90">
+              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
                 {call.mediaError} You can still join to listen and chat.
               </p>
             )}
@@ -1484,7 +1484,7 @@ export default function Call() {
                   className={cn(
                     "flex size-11 items-center justify-center rounded-full transition-colors",
                     call.micOn
-                      ? "bg-white/10 text-white hover:bg-white/20"
+                      ? "bg-foreground/10 text-foreground hover:bg-foreground/20"
                       : "bg-red-500/90 text-white hover:bg-red-500",
                   )}
                 >
@@ -1500,7 +1500,7 @@ export default function Call() {
                   className={cn(
                     "flex size-11 items-center justify-center rounded-full transition-colors",
                     call.camOn
-                      ? "bg-white/10 text-white hover:bg-white/20"
+                      ? "bg-foreground/10 text-foreground hover:bg-foreground/20"
                       : "bg-red-500/90 text-white hover:bg-red-500",
                   )}
                 >
@@ -1517,7 +1517,7 @@ export default function Call() {
               </Button>
             </div>
 
-            <label className="mt-7 block text-[11px] font-medium uppercase tracking-[0.25em] text-neutral-500">
+            <label className="mt-7 block text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">
               Your name
             </label>
             <Input
@@ -1525,11 +1525,11 @@ export default function Call() {
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="How should people see you?"
               maxLength={40}
-              className="mt-2 h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-neutral-500"
+              className="mt-2 h-11 rounded-xl border-border/60 bg-muted/50 text-foreground placeholder:text-muted-foreground"
             />
 
-            <div className="mt-8 border-t border-white/10 pt-6 text-center">
-              <p className="text-xs text-neutral-500">
+            <div className="mt-8 border-t border-border/60 pt-6 text-center">
+              <p className="text-xs text-muted-foreground/70">
                 Peer-to-peer · nothing you say is recorded unless you record it
               </p>
             </div>
@@ -1556,7 +1556,7 @@ function SelfTile({
   peerId: string;
 }) {
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900/90 ring-1 ring-white/10 shadow-lg shadow-black/20">
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-muted/70 ring-1 ring-black/10 dark:ring-white/10 shadow-lg shadow-black/10 dark:shadow-black/25">
       {stream ? <VideoSurface stream={stream} peer={peerId} /> : <Avatar name={name} />}
       <div className="absolute bottom-2.5 left-3 flex items-center gap-2">
         <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
@@ -1597,8 +1597,8 @@ function Tile({
     <div
       key={peerId}
       className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-900/90 shadow-lg shadow-black/20",
-        speaking ? "ring-2 ring-primary speaking-ring" : "ring-1 ring-white/10",
+        "relative aspect-video w-full overflow-hidden rounded-2xl bg-muted/70 shadow-lg shadow-black/10 dark:shadow-black/25",
+        speaking ? "ring-2 ring-primary speaking-ring" : "ring-1 ring-black/10 dark:ring-white/10",
       )}
     >
       {camOff ? (
@@ -1665,7 +1665,7 @@ function ControlButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-12 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95",
+        "flex size-11 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 sm:size-12",
         active ? activeClass : inactiveClass,
       )}
     >
@@ -1691,13 +1691,13 @@ function ChatPanel({
   }, [call.messages?.length]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/80 backdrop-blur-2xl">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="text-sm font-medium">Chat</p>
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close chat"
         >
           <X className="size-4" />
@@ -1705,26 +1705,26 @@ function ChatPanel({
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {call.messages?.length === 0 && (
-          <p className="pt-8 text-center text-sm text-neutral-500">
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">
             No messages yet. Say hi.
           </p>
         )}
         {call.messages?.map((msg) => (
           <div key={msg._id}>
-            <p className="text-xs text-neutral-400">
-              <span className="font-medium text-neutral-200">{msg.name}</span> ·{" "}
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{msg.name}</span> ·{" "}
               {new Date(msg.createdAt).toLocaleTimeString(undefined, {
                 hour: "numeric",
                 minute: "2-digit",
               })}
             </p>
-            <p className="mt-0.5 text-sm text-neutral-100">{msg.text}</p>
+            <p className="mt-0.5 text-sm text-foreground">{msg.text}</p>
           </div>
         ))}
         <div ref={endRef} />
       </div>
       <form
-        className="flex shrink-0 gap-2 border-t border-white/10 p-3"
+        className="flex shrink-0 gap-2 border-t border-border/60 p-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (!draft.trim()) return;
@@ -1736,13 +1736,13 @@ function ChatPanel({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Send a message"
-          className="h-10 flex-1 rounded-full border-white/10 bg-white/5 text-sm text-white placeholder:text-neutral-500"
+          className="h-10 flex-1 rounded-full border-border/60 bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground"
         />
         <Button
           type="submit"
           variant="outline"
           size="icon"
-          className="h-10 w-10 shrink-0 rounded-full border-white/10 text-white hover:bg-white/10"
+          className="h-10 w-10 shrink-0 rounded-full border-border/60 text-foreground hover:bg-muted"
           aria-label="Send message"
         >
           <Send className="size-4" />
@@ -1795,11 +1795,11 @@ function PeoplePanel({
   }, [call.participants, search]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/80 backdrop-blur-2xl">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="text-sm font-medium">
           People{" "}
-          <span className="ml-1 text-xs text-neutral-500 tabular-nums">
+          <span className="ml-1 text-xs text-muted-foreground/70 tabular-nums">
             {call.participants?.length ?? 0}
           </span>
         </p>
@@ -1810,7 +1810,7 @@ function PeoplePanel({
               onClick={onMuteAll}
               title="Mute everyone"
               aria-label="Mute everyone"
-              className="flex size-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+              className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <MicOff className="size-3.5" />
             </button>
@@ -1818,7 +1818,7 @@ function PeoplePanel({
           <button
             type="button"
             onClick={onClose}
-            className="text-neutral-400 transition-colors hover:text-white"
+            className="text-muted-foreground transition-colors hover:text-foreground"
             aria-label="Close people panel"
           >
             <X className="size-4" />
@@ -1826,25 +1826,25 @@ function PeoplePanel({
         </div>
       </div>
 
-      <div className="border-b border-white/10 p-3">
+      <div className="border-b border-border/60 p-3">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search participants…"
-          className="h-9 rounded-full border-white/10 bg-white/5 text-sm text-white placeholder:text-neutral-500"
+          className="h-9 rounded-full border-border/60 bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground"
         />
       </div>
 
       {isModerator && waitingList !== undefined && waitingList.length > 0 && (
         <div className="border-b border-amber-400/20 bg-amber-400/5 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-300">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-300">
               <DoorOpen className="size-3.5" /> Waiting room · {waitingList.length}
             </p>
             <button
               type="button"
               onClick={onAdmitAll}
-              className="flex items-center gap-1 text-[11px] text-amber-300 transition-colors hover:text-amber-200"
+              className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-300 transition-colors hover:text-amber-700 dark:hover:text-amber-200"
             >
               <CheckCheck className="size-3" /> Admit all
             </button>
@@ -1853,14 +1853,14 @@ function PeoplePanel({
             {waitingList.map((w) => (
               <div
                 key={w.clientId}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5"
+                className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-2 py-1.5"
               >
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/60 text-xs font-semibold">
                   {(w.name[0] ?? "?").toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs text-white">{w.name}</p>
-                  <p className="text-[10px] text-neutral-500">
+                  <p className="truncate text-xs text-foreground">{w.name}</p>
+                  <p className="text-[10px] text-muted-foreground/70">
                     Waiting since{" "}
                     {new Date(w.joinedAt).toLocaleTimeString(undefined, {
                       hour: "numeric",
@@ -1873,7 +1873,7 @@ function PeoplePanel({
                   onClick={() => onAdmit(w.clientId)}
                   title="Admit"
                   aria-label={`Admit ${w.name}`}
-                  className="flex size-7 items-center justify-center rounded-full text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                  className="flex size-7 items-center justify-center rounded-full text-emerald-600 dark:text-emerald-400 transition-colors hover:bg-emerald-500/20"
                 >
                   <Check className="size-3.5" />
                 </button>
@@ -1882,7 +1882,7 @@ function PeoplePanel({
                   onClick={() => onReject(w.clientId)}
                   title="Reject"
                   aria-label={`Reject ${w.name}`}
-                  className="flex size-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                  className="flex size-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-red-500/20 hover:text-red-500 dark:hover:text-red-400"
                 >
                   <Ban className="size-3.5" />
                 </button>
@@ -1894,7 +1894,7 @@ function PeoplePanel({
 
       <div className="flex-1 overflow-y-auto p-2">
         {list.length === 0 && (
-          <p className="pt-8 text-center text-sm text-neutral-500">
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">
             {search ? "No matches." : "Nobody else here yet."}
           </p>
         )}
@@ -1907,7 +1907,7 @@ function PeoplePanel({
               key={p.clientId}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors",
-                speaking ? "bg-primary/15" : "hover:bg-white/5",
+                speaking ? "bg-primary/15" : "hover:bg-muted/60",
               )}
             >
               <div
@@ -1915,7 +1915,7 @@ function PeoplePanel({
                   "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
                   speaking
                     ? "bg-gradient-to-br from-indigo-500 to-violet-500 text-white"
-                    : "bg-white/10 text-white",
+                    : "bg-muted/60 text-foreground",
                 )}
               >
                 {(p.name[0] ?? "?").toUpperCase()}
@@ -1923,10 +1923,10 @@ function PeoplePanel({
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
                   <span className="truncate">{p.name}</span>
-                  {self && <span className="shrink-0 text-xs text-neutral-500">(you)</span>}
+                  {self && <span className="shrink-0 text-xs text-muted-foreground/70">(you)</span>}
                   {isHost && self && (
                     <span
-                      className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-400/15 px-1.5 py-px text-[9px] font-medium text-amber-300"
+                      className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-400/15 px-1.5 py-px text-[9px] font-medium text-amber-600 dark:text-amber-300"
                       title="Host"
                     >
                       <Crown className="size-2.5" /> host
@@ -1934,16 +1934,16 @@ function PeoplePanel({
                   )}
                   {coHostIds.has(p.clientId) && (
                     <span
-                      className="flex shrink-0 items-center gap-0.5 rounded-full bg-indigo-400/15 px-1.5 py-px text-[9px] font-medium text-indigo-300"
+                      className="flex shrink-0 items-center gap-0.5 rounded-full bg-indigo-400/15 px-1.5 py-px text-[9px] font-medium text-indigo-600 dark:text-indigo-300"
                       title="Co-host"
                     >
                       <BadgeCheck className="size-2.5" /> co-host
                     </span>
                   )}
                 </p>
-                <p className="flex items-center gap-1 text-[11px] text-neutral-500">
+                <p className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
                   {p.handRaised && (
-                    <span className="flex items-center gap-0.5 text-amber-400">
+                    <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
                       <Hand className="size-3" /> hand raised
                     </span>
                   )}
@@ -1973,7 +1973,7 @@ function PeoplePanel({
                     onClick={() => onMakeCoHost(p.clientId)}
                     title="Make co-host"
                     aria-label="Make co-host"
-                    className="flex size-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"
+                    className="flex size-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-300"
                   >
                     <UserPlus className="size-3.5" />
                   </button>
@@ -1985,7 +1985,7 @@ function PeoplePanel({
                       onClick={() => void mute({ code, target: p.clientId })}
                       title="Mute"
                       aria-label="Mute participant"
-                      className="flex size-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+                      className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <MicOff className="size-3.5" />
                     </button>
@@ -1994,7 +1994,7 @@ function PeoplePanel({
                       onClick={() => void kick({ code, target: p.clientId })}
                       title="Remove from meeting"
                       aria-label="Remove participant"
-                      className="flex size-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                      className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-red-500/20 hover:text-red-500 dark:hover:text-red-400"
                     >
                       <X className="size-3.5" />
                     </button>
@@ -2004,7 +2004,7 @@ function PeoplePanel({
                         onClick={() => void lowered({ code, clientId: p.clientId, raised: false })}
                         title="Lower hand"
                         aria-label="Lower hand"
-                        className="flex size-7 items-center justify-center rounded-full text-amber-400 transition-colors hover:bg-amber-500/20"
+                        className="flex size-7 items-center justify-center rounded-full text-amber-600 dark:text-amber-400 transition-colors hover:bg-amber-500/20"
                       >
                         <Hand className="size-3.5" />
                       </button>
@@ -2018,8 +2018,8 @@ function PeoplePanel({
       </div>
 
       {isModerator && (
-        <div className="border-t border-white/10 p-3 text-center">
-          <p className="text-[11px] text-neutral-500">
+        <div className="border-t border-border/60 p-3 text-center">
+          <p className="text-[11px] text-muted-foreground/70">
             {isHost
               ? "You're the host — mute, remove, or make co-hosts from this panel."
               : "You're a co-host — you can mute or remove participants."}

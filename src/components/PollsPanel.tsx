@@ -57,15 +57,15 @@ export function PollsPanel({
   };
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/95 backdrop-blur-md">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="flex items-center gap-2 text-sm font-medium">
           <BarChart3 className="size-4" /> Polls
         </p>
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close polls"
         >
           <X className="size-4" />
@@ -78,20 +78,20 @@ export function PollsPanel({
             variant="outline"
             size="sm"
             onClick={() => setCreating(true)}
-            className="w-full rounded-full border-white/10 text-white hover:bg-white/10"
+            className="w-full rounded-full border-border/60 text-foreground hover:bg-muted"
           >
             + New poll
           </Button>
         )}
 
         {isHost && creating && (
-          <div className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-3">
+          <div className="space-y-2 rounded-xl border border-border/60 bg-muted/50 p-3">
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Question…"
               maxLength={120}
-              className="h-9 border-white/10 bg-white/5 text-sm text-white placeholder:text-neutral-500"
+              className="h-9 border-border/60 bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground"
             />
             <div className="flex gap-1">
               {(["single", "multiple", "anonymous"] as const).map((t) => (
@@ -102,8 +102,8 @@ export function PollsPanel({
                   className={cn(
                     "flex-1 rounded-full px-2 py-1 text-[11px] transition-colors",
                     type === t
-                      ? "bg-white/20 text-white"
-                      : "text-neutral-400 hover:bg-white/5 hover:text-white",
+                      ? "bg-foreground/15 text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   {TYPE_LABEL[t]}
@@ -116,7 +116,7 @@ export function PollsPanel({
               placeholder={"One option per line (2–8)…"}
               rows={4}
               maxLength={600}
-              className="w-full resize-none rounded-lg border border-white/10 bg-white/5 p-2 text-sm text-white placeholder:text-neutral-500 outline-none focus:border-white/30"
+              className="w-full resize-none rounded-lg border border-border/60 bg-muted/50 p-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50"
             />
             <div className="flex gap-2">
               <Button
@@ -131,7 +131,7 @@ export function PollsPanel({
                 size="sm"
                 variant="outline"
                 onClick={() => setCreating(false)}
-                className="rounded-full border-white/10 text-white hover:bg-white/10"
+                className="rounded-full border-border/60 text-foreground hover:bg-muted"
               >
                 Cancel
               </Button>
@@ -140,9 +140,9 @@ export function PollsPanel({
         )}
 
         {polls === undefined ? (
-          <p className="pt-8 text-center text-sm text-neutral-500">Loading…</p>
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">Loading…</p>
         ) : polls.length === 0 ? (
-          <p className="pt-8 text-center text-sm text-neutral-500">
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">
             No polls yet. {isHost ? "Create one to get going." : "The host can start one."}
           </p>
         ) : (
@@ -152,17 +152,17 @@ export function PollsPanel({
             return (
               <div
                 key={poll._id}
-                className="rounded-xl border border-white/10 bg-white/5 p-3"
+                className="rounded-xl border border-border/60 bg-muted/50 p-3"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-white">{poll.title}</p>
-                  <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-neutral-400">
+                  <p className="text-sm font-medium text-foreground">{poll.title}</p>
+                  <span className="shrink-0 rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground">
                     {TYPE_LABEL[poll.type]}
                   </span>
                 </div>
 
                 {!poll.launched && (
-                  <p className="mt-1 text-[11px] text-neutral-500">Draft — launch when ready.</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground/70">Draft — launch when ready.</p>
                 )}
 
                 <div className="mt-2.5 space-y-1.5">
@@ -193,23 +193,23 @@ export function PollsPanel({
                         className={cn(
                           "relative w-full overflow-hidden rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
                           open
-                            ? "border-white/15 text-neutral-100 hover:border-white/30"
-                            : "border-white/10 text-neutral-400",
+                            ? "border-border/70 text-foreground hover:border-border/80"
+                            : "border-border/60 text-muted-foreground",
                           mine && "border-indigo-400/60 bg-indigo-500/10",
                         )}
                       >
                         {showResults && (
                           <span
-                            className="absolute inset-y-0 left-0 bg-white/10"
+                            className="absolute inset-y-0 left-0 bg-muted/80"
                             style={{ width: `${pct}%` }}
                           />
                         )}
                         <span className="relative flex items-center justify-between gap-2">
                           <span>{option}</span>
                           <span className="flex items-center gap-1.5">
-                            {mine && open && <Check className="size-3 text-indigo-300" />}
+                            {mine && open && <Check className="size-3 text-indigo-600 dark:text-indigo-300" />}
                             {showResults && (
-                              <span className="tabular-nums text-neutral-400">
+                              <span className="tabular-nums text-muted-foreground">
                                 {count} · {pct}%
                               </span>
                             )}
@@ -221,13 +221,13 @@ export function PollsPanel({
                 </div>
 
                 {poll.voterCount > 0 && (
-                  <p className="mt-2 text-[10px] text-neutral-500">
+                  <p className="mt-2 text-[10px] text-muted-foreground/70">
                     {poll.voterCount} vote{poll.voterCount === 1 ? "" : "s"}
                   </p>
                 )}
 
                 {isHost && (
-                  <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-white/10 pt-2.5">
+                  <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-border/60 pt-2.5">
                     {!poll.launched && (
                       <Button
                         size="sm"
@@ -242,7 +242,7 @@ export function PollsPanel({
                         size="sm"
                         variant="outline"
                         onClick={() => void closePoll({ code, pollId: poll._id })}
-                        className="h-7 rounded-full border-white/10 px-2.5 text-[11px] text-white hover:bg-white/10"
+                        className="h-7 rounded-full border-border/60 px-2.5 text-[11px] text-foreground hover:bg-muted"
                       >
                         <Lock className="mr-1 size-3" /> Close
                       </Button>
@@ -257,7 +257,7 @@ export function PollsPanel({
                             show: !poll.showResults,
                           })
                         }
-                        className="h-7 rounded-full border border-white/10 px-2.5 text-[11px] text-neutral-300 transition-colors hover:bg-white/10"
+                        className="h-7 rounded-full border border-border/60 px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted"
                       >
                         {poll.showResults ? "Hide results" : "Show results"}
                       </button>
@@ -266,7 +266,7 @@ export function PollsPanel({
                       type="button"
                       onClick={() => void deletePoll({ code, pollId: poll._id })}
                       aria-label="Delete poll"
-                      className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                      className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-red-500/20 hover:text-red-600 dark:text-red-400"
                     >
                       <Trash2 className="size-3.5" />
                     </button>
@@ -279,8 +279,8 @@ export function PollsPanel({
       </div>
 
       {isHost && (
-        <div className="border-t border-white/10 p-3 text-center">
-          <p className="text-[11px] text-neutral-500">
+        <div className="border-t border-border/60 p-3 text-center">
+          <p className="text-[11px] text-muted-foreground/70">
             You're the host — you control when polls launch and close.
           </p>
         </div>

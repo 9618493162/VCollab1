@@ -41,20 +41,20 @@ export function QAPanel({
   };
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/95 backdrop-blur-md">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="text-sm font-medium">Q&A</p>
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close Q&A"
         >
           <X className="size-4" />
         </button>
       </div>
 
-      <div className="border-b border-white/10 p-3">
+      <div className="border-b border-border/60 p-3">
         <div className="flex gap-2">
           <textarea
             value={draft}
@@ -65,7 +65,7 @@ export function QAPanel({
             placeholder="Ask a question…"
             rows={2}
             maxLength={500}
-            className="w-full resize-none rounded-lg border border-white/10 bg-white/5 p-2 text-sm text-white placeholder:text-neutral-500 outline-none focus:border-white/30"
+            className="w-full resize-none rounded-lg border border-border/60 bg-muted/50 p-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50"
           />
           <Button
             size="icon"
@@ -81,9 +81,9 @@ export function QAPanel({
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {questions === undefined ? (
-          <p className="pt-8 text-center text-sm text-neutral-500">Loading…</p>
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">Loading…</p>
         ) : questions.length === 0 ? (
-          <p className="pt-8 text-center text-sm text-neutral-500">
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">
             No questions yet. Ask the first one.
           </p>
         ) : (
@@ -94,19 +94,19 @@ export function QAPanel({
               <div
                 key={q._id}
                 className={cn(
-                  "rounded-xl border bg-white/5 p-3",
-                  q.pinned ? "border-amber-400/40" : "border-white/10",
+                  "rounded-xl border bg-muted/50 p-3",
+                  q.pinned ? "border-amber-400/40" : "border-border/60",
                 )}
               >
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     {q.pinned && (
-                      <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                      <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-300">
                         <Pin className="size-2.5" /> Pinned
                       </span>
                     )}
-                    <p className="text-sm text-white">{q.text}</p>
-                    <p className="mt-1 text-[11px] text-neutral-500">
+                    <p className="text-sm text-foreground">{q.text}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground/70">
                       {mine ? "You" : q.authorName} ·{" "}
                       {new Date(q.createdAt).toLocaleTimeString(undefined, {
                         hour: "numeric",
@@ -120,8 +120,8 @@ export function QAPanel({
                     className={cn(
                       "flex shrink-0 flex-col items-center gap-0.5 rounded-lg border px-2 py-1 text-[11px] transition-colors",
                       upvoted
-                        ? "border-indigo-400/60 bg-indigo-500/10 text-indigo-300"
-                        : "border-white/10 text-neutral-400 hover:border-white/25 hover:text-white",
+                        ? "border-indigo-400/60 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300"
+                        : "border-border/60 text-muted-foreground hover:border-border/80 hover:text-foreground",
                     )}
                     aria-label="Upvote question"
                   >
@@ -132,14 +132,14 @@ export function QAPanel({
 
                 {q.answered && q.answer && (
                   <div className="mt-2.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 p-2.5">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-300">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
                       Answer
                     </p>
-                    <p className="mt-0.5 text-xs text-neutral-100">{q.answer}</p>
+                    <p className="mt-0.5 text-xs text-foreground">{q.answer}</p>
                   </div>
                 )}
 
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2">
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2">
                   {isHost && (
                     <>
                       <button
@@ -148,14 +148,14 @@ export function QAPanel({
                           setAnsweringId(answeringId === q._id ? null : q._id);
                           setAnswerDraft(q.answer ?? "");
                         }}
-                        className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-neutral-300 transition-colors hover:bg-white/10"
+                        className="rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted"
                       >
                         {q.answered ? "Edit answer" : "Answer"}
                       </button>
                       <button
                         type="button"
                         onClick={() => void togglePin({ code, questionId: q._id })}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-white/10 hover:text-white"
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
                         aria-label={q.pinned ? "Unpin question" : "Pin question"}
                         title={q.pinned ? "Unpin" : "Pin to top"}
                       >
@@ -164,7 +164,7 @@ export function QAPanel({
                       <button
                         type="button"
                         onClick={() => void deleteQuestion({ code, questionId: q._id })}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-red-500/20 hover:text-red-600 dark:text-red-400"
                         aria-label="Delete question"
                       >
                         <Trash2 className="size-3" />
@@ -175,7 +175,7 @@ export function QAPanel({
                     <button
                       type="button"
                       onClick={() => void removeQuestion({ code, questionId: q._id, clientId })}
-                      className="ml-auto rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+                      className="ml-auto rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       Remove
                     </button>
@@ -191,7 +191,7 @@ export function QAPanel({
                       rows={2}
                       maxLength={800}
                       autoFocus
-                      className="w-full resize-none rounded-lg border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-neutral-500 outline-none focus:border-white/30"
+                      className="w-full resize-none rounded-lg border border-border/60 bg-muted/50 p-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50"
                     />
                     <div className="flex flex-col gap-1">
                       <Button
@@ -211,7 +211,7 @@ export function QAPanel({
                         size="sm"
                         variant="outline"
                         onClick={() => setAnsweringId(null)}
-                        className="h-8 rounded-full border-white/10 px-2.5 text-[11px] text-white hover:bg-white/10"
+                        className="h-8 rounded-full border-border/60 px-2.5 text-[11px] text-foreground hover:bg-muted"
                       >
                         Cancel
                       </Button>
@@ -225,8 +225,8 @@ export function QAPanel({
       </div>
 
       {isHost && (
-        <div className="border-t border-white/10 p-3 text-center">
-          <p className="text-[11px] text-neutral-500">
+        <div className="border-t border-border/60 p-3 text-center">
+          <p className="text-[11px] text-muted-foreground/70">
             You're the host — answer, pin, or remove questions.
           </p>
         </div>

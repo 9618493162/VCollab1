@@ -24,17 +24,17 @@ function Toggle({
       disabled={disabled}
       className={cn(
         "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
-        disabled ? "cursor-not-allowed opacity-50" : "border-white/10 bg-white/5 hover:bg-white/10",
+        disabled ? "cursor-not-allowed opacity-50" : "border-border/60 bg-muted/50 hover:bg-muted",
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm text-white">{label}</span>
-        {description && <span className="block text-[11px] text-neutral-500">{description}</span>}
+        <span className="block text-sm text-foreground">{label}</span>
+        {description && <span className="block text-[11px] text-muted-foreground/70">{description}</span>}
       </span>
       <span
         className={cn(
           "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-          on ? "bg-indigo-500" : "bg-white/15",
+          on ? "bg-indigo-500" : "bg-foreground/10",
         )}
         aria-hidden
       >
@@ -82,15 +82,15 @@ export function SecurityPanel({
   };
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/95 backdrop-blur-md">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="flex items-center gap-2 text-sm font-medium">
           <ShieldCheck className="size-4" /> Security
         </p>
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close security"
         >
           <X className="size-4" />
@@ -99,7 +99,7 @@ export function SecurityPanel({
 
       <div className="flex-1 space-y-4 overflow-y-auto p-3">
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Meeting access
           </p>
           <Toggle
@@ -119,7 +119,7 @@ export function SecurityPanel({
         </div>
 
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Participant permissions
           </p>
           {(
@@ -143,14 +143,14 @@ export function SecurityPanel({
         </div>
 
         {!canManage && (
-          <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-[11px] text-neutral-500">
+          <p className="rounded-xl border border-border/60 bg-muted/50 p-3 text-[11px] text-muted-foreground/70">
             Only the host or a co-host can change security settings.
           </p>
         )}
       </div>
 
-      <div className="border-t border-white/10 p-3 text-center">
-        <p className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-500">
+      <div className="border-t border-border/60 p-3 text-center">
+        <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/70">
           <Users className="size-3" /> The host is notified when the waiting room is used.
         </p>
       </div>

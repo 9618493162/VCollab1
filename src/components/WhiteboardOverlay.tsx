@@ -112,19 +112,19 @@ export function WhiteboardOverlay({
   };
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col bg-neutral-900/95 backdrop-blur-md">
+    <div className="absolute inset-0 z-40 flex flex-col bg-background/95 backdrop-blur-md">
       {/* toolbar */}
-      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4">
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4">
         <p className="flex items-center gap-2 text-sm font-medium">
           <PenLine className="size-4" /> Whiteboard
-          <span className="hidden text-[11px] font-normal text-neutral-500 sm:inline">
+          <span className="hidden text-[11px] font-normal text-muted-foreground/70 sm:inline">
             {strokes?.length ?? 0} stroke{(strokes?.length ?? 0) === 1 ? "" : "s"}
           </span>
         </p>
 
         <div className="flex items-center gap-1.5">
           {/* colors */}
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1">
+          <div className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-1">
             {COLORS.map((c) => (
               <button
                 key={c}
@@ -133,7 +133,7 @@ export function WhiteboardOverlay({
                 aria-label={`Color ${c}`}
                 className={cn(
                   "size-4 rounded-full border transition-transform",
-                  color === c ? "scale-110 border-white ring-1 ring-white/60" : "border-white/20",
+                  color === c ? "scale-110 border-border ring-1 ring-white/60" : "border-border/70",
                 )}
                 style={{ backgroundColor: c }}
               />
@@ -141,7 +141,7 @@ export function WhiteboardOverlay({
           </div>
 
           {/* widths */}
-          <div className="flex items-center gap-0.5 rounded-full border border-white/10 bg-white/5 px-1.5 py-1">
+          <div className="flex items-center gap-0.5 rounded-full border border-border/60 bg-muted/50 px-1.5 py-1">
             {WIDTHS.map((w) => (
               <button
                 key={w}
@@ -150,7 +150,7 @@ export function WhiteboardOverlay({
                 aria-label={`Width ${w}`}
                 className={cn(
                   "flex h-6 w-6 items-center justify-center rounded-full transition-colors",
-                  width === w ? "bg-white/20" : "hover:bg-white/10",
+                  width === w ? "bg-foreground/15" : "hover:bg-muted",
                 )}
               >
                 <span className="rounded-full bg-white" style={{ width: Math.max(2, w), height: Math.max(2, w) }} />
@@ -165,8 +165,8 @@ export function WhiteboardOverlay({
             className={cn(
               "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] transition-colors",
               highlighter
-                ? "border-amber-400/50 bg-amber-400/15 text-amber-200"
-                : "border-white/10 bg-white/5 text-neutral-400 hover:text-white",
+                ? "border-amber-400/50 bg-amber-400/15 text-amber-600 dark:text-amber-200"
+                : "border-border/60 bg-muted/50 text-muted-foreground hover:text-foreground",
             )}
           >
             <Eraser className="size-3.5" /> Highlight
@@ -176,7 +176,7 @@ export function WhiteboardOverlay({
             type="button"
             onClick={undo}
             title="Undo my last stroke"
-            className="flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 text-[11px] text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Undo2 className="size-3.5" /> Undo
           </button>
@@ -186,7 +186,7 @@ export function WhiteboardOverlay({
               size="sm"
               variant="outline"
               onClick={clear}
-              className="h-8 rounded-full border-red-500/40 px-2.5 text-[11px] text-red-300 hover:bg-red-500/15 hover:text-red-200"
+              className="h-8 rounded-full border-red-500/40 px-2.5 text-[11px] text-red-600 dark:text-red-300 hover:bg-red-500/15 hover:text-red-600 dark:text-red-300"
             >
               <Trash2 className="size-3.5" /> Clear
             </Button>
@@ -196,7 +196,7 @@ export function WhiteboardOverlay({
             type="button"
             onClick={onClose}
             aria-label="Close whiteboard"
-            className="flex size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+            className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X className="size-4" />
           </button>
@@ -205,7 +205,7 @@ export function WhiteboardOverlay({
 
       {/* board */}
       <div className="min-h-0 flex-1 p-4">
-        <div className="relative h-full w-full overflow-hidden rounded-2xl border border-white/10 bg-neutral-800">
+        <div className="relative h-full w-full overflow-hidden rounded-2xl border border-border/60 bg-white dark:bg-neutral-800">
           <svg
             ref={svgRef}
             className="absolute inset-0 h-full w-full cursor-crosshair touch-none select-none"

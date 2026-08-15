@@ -24,14 +24,14 @@ export function NotesTasksPanel({
   const [tab, setTab] = useState<"notes" | "tasks">("notes");
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-white/10 bg-neutral-900/95 backdrop-blur-md">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
-        <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5">
+    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/95 backdrop-blur-md">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
+        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={() => setTab("notes")}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${
-              tab === "notes" ? "bg-white/15 text-white" : "text-neutral-400 hover:text-white"
+              tab === "notes" ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <StickyNote className="size-3.5" /> Notes
@@ -40,7 +40,7 @@ export function NotesTasksPanel({
             type="button"
             onClick={() => setTab("tasks")}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${
-              tab === "tasks" ? "bg-white/15 text-white" : "text-neutral-400 hover:text-white"
+              tab === "tasks" ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <ClipboardList className="size-3.5" /> Tasks
@@ -49,7 +49,7 @@ export function NotesTasksPanel({
         <button
           type="button"
           onClick={onClose}
-          className="text-neutral-400 transition-colors hover:text-white"
+          className="text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close notes and tasks"
         >
           <X className="size-4" />
@@ -112,7 +112,7 @@ function NotesTab({ code }: { code: string }) {
             schedule(() => void persist(e.target.value, content));
           }}
           placeholder="Meeting notes title"
-          className="h-9 border-white/10 bg-white/5 text-sm font-medium text-white placeholder:text-neutral-500"
+          className="h-9 border-border/60 bg-muted/50 text-sm font-medium text-foreground placeholder:text-muted-foreground"
         />
         <Textarea
           value={content}
@@ -121,10 +121,10 @@ function NotesTab({ code }: { code: string }) {
             schedule(() => void persist(title, e.target.value));
           }}
           placeholder="Type notes here — they autosave and are shared with everyone in the meeting…"
-          className="min-h-[220px] flex-1 resize-none border-white/10 bg-white/5 text-sm text-white placeholder:text-neutral-500"
+          className="min-h-[220px] flex-1 resize-none border-border/60 bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground"
         />
       </div>
-      <div className="flex h-9 shrink-0 items-center justify-between border-t border-white/10 px-4 text-[11px] text-neutral-500">
+      <div className="flex h-9 shrink-0 items-center justify-between border-t border-border/60 px-4 text-[11px] text-muted-foreground/70">
         <span>Shared notes</span>
         <span className="flex items-center gap-1">
           {saveState === "saving" && (
@@ -134,7 +134,7 @@ function NotesTab({ code }: { code: string }) {
           )}
           {saveState === "saved" && (
             <>
-              <Check className="size-3 text-emerald-400" /> Saved
+              <Check className="size-3 text-emerald-600 dark:text-emerald-400" /> Saved
             </>
           )}
           {saveState === "idle" && "Autosave on"}
@@ -183,19 +183,19 @@ function TasksTab({ code }: { code: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <form onSubmit={submit} className="space-y-2 border-b border-white/10 p-3">
+      <form onSubmit={submit} className="space-y-2 border-b border-border/60 p-3">
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="New task…"
-          className="h-9 border-white/10 bg-white/5 text-sm text-white placeholder:text-neutral-500"
+          className="h-9 border-border/60 bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground"
         />
         <div className="flex gap-2">
           <Input
             value={assignee}
             onChange={(e) => setAssignee(e.target.value)}
             placeholder="Assignee (optional)"
-            className="h-8 flex-1 border-white/10 bg-white/5 text-xs text-white placeholder:text-neutral-500"
+            className="h-8 flex-1 border-border/60 bg-muted/50 text-xs text-foreground placeholder:text-muted-foreground"
           />
           <Button type="submit" size="sm" className="h-8 shrink-0 px-3 text-xs">
             <Plus className="mr-1 size-3.5" /> Add
@@ -205,7 +205,7 @@ function TasksTab({ code }: { code: string }) {
 
       <div className="flex-1 overflow-y-auto p-3">
         {cards !== undefined && cards.length === 0 && (
-          <p className="pt-8 text-center text-sm text-neutral-500">
+          <p className="pt-8 text-center text-sm text-muted-foreground/70">
             No tasks yet — add one above.
           </p>
         )}
@@ -214,18 +214,18 @@ function TasksTab({ code }: { code: string }) {
           if (colCards.length === 0) return null;
           return (
             <div key={col} className="mb-4">
-              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
                 {COLUMN_LABELS[col]} · {colCards.length}
               </p>
               <div className="space-y-2">
                 {colCards.map((card) => (
                   <div
                     key={card._id}
-                    className="group rounded-xl border border-white/10 bg-white/5 p-2.5"
+                    className="group rounded-xl border border-border/60 bg-muted/50 p-2.5"
                   >
-                    <p className="text-sm text-white">{card.title}</p>
+                    <p className="text-sm text-foreground">{card.title}</p>
                     {(card.assignee || card.priority) && (
-                      <p className="mt-1 text-[11px] text-neutral-500">
+                      <p className="mt-1 text-[11px] text-muted-foreground/70">
                         {card.assignee && `→ ${card.assignee}`}
                         {card.assignee && card.priority && " · "}
                         {card.priority && <span className="capitalize">{card.priority}</span>}
@@ -236,7 +236,7 @@ function TasksTab({ code }: { code: string }) {
                         value={card.column}
                         onChange={(e) => void moveCard({ cardId: card._id, column: e.target.value })}
                         aria-label="Move task"
-                        className="h-7 flex-1 rounded-md border border-white/10 bg-neutral-900 px-1.5 text-[11px] text-neutral-300"
+                        className="h-7 flex-1 rounded-md border border-border/60 bg-muted/60 px-1.5 text-[11px] text-muted-foreground"
                       >
                         {COLUMNS.map((c) => (
                           <option key={c} value={c}>
@@ -249,7 +249,7 @@ function TasksTab({ code }: { code: string }) {
                         onClick={() => void deleteCard({ cardId: card._id })}
                         aria-label="Delete task"
                         title="Delete task"
-                        className="flex size-7 items-center justify-center rounded-md text-neutral-500 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
+                        className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-600 dark:text-red-400 group-hover:opacity-100"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
