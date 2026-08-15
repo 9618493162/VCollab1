@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { AppHeader } from "@/components/AppHeader";
 import { usePresence } from "@/hooks/use-presence";
 import { PresenceDot } from "@/components/PresenceDot";
 import { Button } from "@/components/ui/button";
@@ -89,20 +90,33 @@ export default function Messages() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
-          <p className="text-xs text-muted-foreground">Direct messages with teammates.</p>
+    <div className="min-h-screen bg-background">
+      <AppHeader active="messages" />
+      <main className="mx-auto max-w-6xl px-4 pb-10 pt-8 sm:px-6">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground">
+              Direct messages
+            </p>
+            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight">
+              Messages
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Direct messages with teammates.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="press h-10 rounded-full px-5"
+            onClick={() => setPickerOpen(true)}
+          >
+            <PenSquare className="size-4" /> New message
+          </Button>
         </div>
-        <Button size="sm" onClick={() => setPickerOpen(true)}>
-          <PenSquare className="size-4" /> New message
-        </Button>
-      </div>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-        {/* Thread list */}
-        <aside className="rounded-2xl border border-border/80 bg-card/50 p-2 lg:h-[calc(100vh-11rem)] lg:overflow-y-auto">
+        <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
+          {/* Thread list */}
+          <aside className="glass-float depth-1 rounded-2xl p-2 lg:h-[calc(100vh-12rem)] lg:overflow-y-auto">
           {threads === undefined ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">Loading…</p>
           ) : threads.length === 0 ? (
@@ -159,7 +173,7 @@ export default function Messages() {
         </aside>
 
         {/* Conversation */}
-        <main className="flex h-[calc(100vh-11rem)] flex-col overflow-hidden rounded-2xl border border-border/80 bg-card/50">
+        <main className="glass-float depth-1 flex h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-2xl">
           {selected ? (
             <>
               <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
@@ -244,11 +258,13 @@ export default function Messages() {
         </main>
       </div>
 
+      </main>
+
       {/* New-message picker */}
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>New message</DialogTitle>
+            <DialogTitle className="font-display">New message</DialogTitle>
             <DialogDescription>Find a teammate by name or email.</DialogDescription>
           </DialogHeader>
           <div className="relative">

@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api";
+import { AppHeader } from "@/components/AppHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { usePresence } from "@/hooks/use-presence";
 import { Button } from "@/components/ui/button";
@@ -51,23 +52,30 @@ export default function Workspaces() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <div className="min-h-screen bg-background">
+      <AppHeader active="workspaces" />
+      <main className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Workspaces</h1>
+          <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground">
+            Team spaces
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+            Workspaces
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Team spaces for channels, messages, meetings and shared work.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="press h-11 rounded-full px-6">
               <Plus className="size-4" /> New workspace
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Create a workspace</DialogTitle>
+              <DialogTitle className="font-display">Create a workspace</DialogTitle>
               <DialogDescription>
                 You'll become the owner. Invite teammates after it's created.
               </DialogDescription>
@@ -95,7 +103,7 @@ export default function Workspaces() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={submit} disabled={busy}>
+              <Button onClick={submit} disabled={busy} className="rounded-full">
                 {busy ? "Creating…" : "Create workspace"}
               </Button>
             </DialogFooter>
@@ -104,13 +112,15 @@ export default function Workspaces() {
       </div>
 
       {workspaces === undefined ? (
-        <p className="mt-16 text-center text-sm text-muted-foreground">
-          Loading…
-        </p>
+        <div className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="glass-float h-44 animate-pulse rounded-2xl" />
+          ))}
+        </div>
       ) : workspaces.length === 0 ? (
-        <div className="mt-16 rounded-2xl border border-dashed border-border/80 p-12 text-center">
+        <div className="glass-float depth-1 mt-10 rounded-2xl p-14 text-center">
           <Building2 className="mx-auto size-10 text-muted-foreground/60" />
-          <p className="mt-4 font-medium">No workspaces yet</p>
+          <p className="mt-4 font-display font-semibold">No workspaces yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {user?.name?.split(" ")[0] ?? "You"} can create one and invite your team.
           </p>
@@ -122,7 +132,7 @@ export default function Workspaces() {
               key={w._id}
               type="button"
               onClick={() => navigate(`/workspaces/${w._id}`)}
-              className="group rounded-2xl border border-border/80 bg-card/60 p-5 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
+              className="glass-float depth-1 hover-lift press group rounded-2xl p-5 text-left"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 text-lg font-semibold text-primary">
@@ -146,9 +156,10 @@ export default function Workspaces() {
                 <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
               </div>
             </button>
-          ))}
+          )          )}
         </div>
       )}
+      </main>
     </div>
   );
 }

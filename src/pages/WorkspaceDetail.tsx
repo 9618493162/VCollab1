@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { AppHeader } from "@/components/AppHeader";
 import { usePresence } from "@/hooks/use-presence";
 import { PresenceDot } from "@/components/PresenceDot";
 import { Button } from "@/components/ui/button";
@@ -154,18 +155,31 @@ export default function WorkspaceDetail() {
   }, [channelMessages, activeChannelId]);
 
   if (workspace === undefined) {
-    return <p className="mx-auto max-w-6xl px-4 py-16 text-center text-sm text-muted-foreground">Loading…</p>;
+    return (
+      <div className="min-h-screen bg-background">
+        <AppHeader active="workspaces" />
+        <p className="mx-auto max-w-6xl px-4 py-16 text-center text-sm text-muted-foreground">
+          Loading…
+        </p>
+      </div>
+    );
   }
   if (workspace === null) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-16 text-center">
-        <p className="font-medium">Workspace not found</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You're not a member, or it doesn't exist.
-        </p>
-        <Button className="mt-4" onClick={() => navigate("/workspaces")}>
-          Back to workspaces
-        </Button>
+      <div className="min-h-screen bg-background">
+        <AppHeader active="workspaces" />
+        <div className="mx-auto max-w-6xl px-4 py-16 text-center">
+          <p className="font-display font-semibold">Workspace not found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You're not a member, or it doesn't exist.
+          </p>
+          <Button
+            className="mt-4 rounded-full"
+            onClick={() => navigate("/workspaces")}
+          >
+            Back to workspaces
+          </Button>
+        </div>
       </div>
     );
   }
@@ -234,8 +248,10 @@ export default function WorkspaceDetail() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="min-h-screen bg-background">
+      <AppHeader active="workspaces" />
+      <main className="mx-auto max-w-6xl px-4 pb-10 pt-8 sm:px-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -246,9 +262,9 @@ export default function WorkspaceDetail() {
             <ArrowLeft className="size-4" />
           </button>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">{workspace.name}</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">{workspace.name}</h1>
             {workspace.description && (
-              <p className="text-xs text-muted-foreground">{workspace.description}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{workspace.description}</p>
             )}
           </div>
         </div>
@@ -256,7 +272,12 @@ export default function WorkspaceDetail() {
           <span className="hidden rounded-full border border-border/70 px-2.5 py-1 text-[11px] font-medium capitalize text-muted-foreground sm:block">
             {workspace.myRole}
           </span>
-          <Button size="sm" onClick={() => setInviteOpen(true)} disabled={!canManage}>
+          <Button
+            size="sm"
+            className="press rounded-full px-5"
+            onClick={() => setInviteOpen(true)}
+            disabled={!canManage}
+          >
             <UserPlus className="size-4" /> Invite
           </Button>
         </div>
@@ -264,7 +285,7 @@ export default function WorkspaceDetail() {
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         {/* Sidebar: channels + members */}
-        <aside className="rounded-2xl border border-border/80 bg-card/50 p-3 lg:h-[calc(100vh-11rem)] lg:overflow-y-auto">
+        <aside className="glass-float depth-1 rounded-2xl p-3 lg:h-[calc(100vh-13rem)] lg:overflow-y-auto">
           <p className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Channels
           </p>
@@ -418,7 +439,7 @@ export default function WorkspaceDetail() {
         </aside>
 
         {/* Main: channel chat */}
-        <main className="flex h-[calc(100vh-11rem)] flex-col overflow-hidden rounded-2xl border border-border/80 bg-card/50">
+        <main className="glass-float depth-1 flex h-[calc(100vh-13rem)] flex-col overflow-hidden rounded-2xl">
           <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
             <Hash className="size-4 text-muted-foreground" />
             <span className="font-medium">{selectedChannel?.name ?? "…"}</span>
@@ -516,6 +537,8 @@ export default function WorkspaceDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      </main>
 
       {/* Schedule team meeting */}
       <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>

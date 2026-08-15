@@ -8,6 +8,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useMutation, useQuery } from "convex/react";
 import { CheckCircle2, CircleHelp, LifeBuoy, Send } from "lucide-react";
@@ -75,14 +76,14 @@ export default function Help() {
   return (
     <>
       <AppHeader active="help" />
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-4xl px-4 pb-16 pt-10 sm:px-6">
       <div className="mb-6 flex items-center gap-3">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20">
+        <div className="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 shadow-sm">
           <LifeBuoy className="size-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Help center</h1>
-          <p className="text-xs text-muted-foreground">
+          <h1 className="font-display text-2xl font-bold tracking-tight">Help center</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Answers to common questions, plus a direct line to support.
           </p>
         </div>
@@ -108,7 +109,7 @@ export default function Help() {
 
         {/* Contact + tickets */}
         <section className="space-y-6">
-          <div className="rounded-2xl border border-border/80 bg-card/50 p-5">
+          <div className="glass-float depth-1 rounded-2xl p-5">
             <h2 className="mb-3 text-sm font-semibold">Contact support</h2>
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -123,14 +124,14 @@ export default function Help() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ticket-message">Details</Label>
-                <textarea
+                <Textarea
                   id="ticket-message"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={5}
                   maxLength={5000}
                   placeholder="Describe the issue — what you expected, what happened, and any error text."
-                  className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus-visible:ring-2"
+                  className="resize-none"
                 />
               </div>
               <Button
@@ -143,7 +144,7 @@ export default function Help() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/80 bg-card/50 p-5">
+          <div className="glass-float depth-1 rounded-2xl p-5">
             <h2 className="mb-3 text-sm font-semibold">Your requests</h2>
             {tickets === undefined ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
@@ -172,7 +173,7 @@ export default function Help() {
           </div>
         </section>
       </div>
-      </div>
+      </main>
     </>
   );
 }
