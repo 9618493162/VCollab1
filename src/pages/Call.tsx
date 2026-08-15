@@ -309,7 +309,7 @@ export default function Call() {
           const msg = error instanceof Error ? error.message : "";
           if (/isn't configured|not configured/i.test(msg)) {
             setTranslationNotice(
-              "Live translation needs OPENAI_API_KEY in the project Keys tab.",
+              "Live translation needs an AI provider key — add GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.",
             );
           } else if (msg) {
             setTranslationNotice("Live translation isn't available right now.");

@@ -3,6 +3,11 @@
 // Node-runtime module: reads API keys via process.env (set them in the
 // project's Keys/API keys tab — never in the frontend). Only actions can be
 // defined here; the query/mutation helpers live in aiData.ts.
+//
+// Providers:
+//   Transcription: DEEPGRAM_API_KEY (primary) → ASSEMBLYAI_API_KEY (fallback)
+//   LLM features (summary, action items, assistant, translation, minutes):
+//     GROQ_API_KEY → OPENROUTER_API_KEY → OPENAI_API_KEY
 import { v } from "convex/values";
 import { action, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
@@ -41,96 +46,245 @@ async function loadAiData(
   return await ctx.runQuery(api.aiData.getAiData, { code, kind });
 }
 
+const LLM_NOT_CONFIGURED =
+  "AI isn't configured — add GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.";
+
+/** Pick the first available LLM provider: Groq → OpenRouter → OpenAI. */
+function pickLlm(): {
+  key: string;
+  baseUrl: string;
+  model: string;
+  label: string;
+} | null {
+  if (process.env.GROQ_API_KEY)
+    return {
+      key: process.env.GROQ_API_KEY,
+      baseUrl: "https://api.groq.com/openai/v1",
+      model: "llama-3.3-70b-versatile",
+      label: "groq",
+    };
+  if (process.env.OPENROUTER_API_KEY)
+    return {
+      key: process.env.OPENROUTER_API_KEY,
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "openai/gpt-4o-mini",
+      label: "openrouter",
+    };
+  if (process.env.OPENAI_API_KEY)
+    return {
+      key: process.env.OPENAI_API_KEY,
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o-mini",
+      label: "openai",
+    };
+  return null;
+}
+
+/** OpenAI-compatible chat completion against the first configured provider. */
+async function llmChat(
+  messages: { role: "system" | "user"; content: string }[],
+): Promise<{ text: string; model: string }> {
+  const provider = pickLlm();
+  if (!provider) throw new Error(LLM_NOT_CONFIGURED);
+  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${provider.key}`,
+      "content-type": "application/json",
+      ...(provider.label === "openrouter"
+        ? { "HTTP-Referer": "https://vcollab.app", "X-Title": "VCollab" }
+        : {}),
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      messages,
+      temperature: 0.4,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `${provider.label} request failed (${res.status}): ${body.slice(0, 200)}`,
+    );
+  }
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return {
+    text: data.choices?.[0]?.message?.content?.trim() ?? "",
+    model: provider.model,
+  };
+}
+
 /**
- * Transcribe a recorded meeting via AssemblyAI (speaker labels + summary),
- * then extract action items via OpenAI when a key is available.
+ * Transcribe a recorded meeting. Uses Deepgram (speaker diarization +
+ * smart formatting) when DEEPGRAM_API_KEY is set, falling back to
+ * AssemblyAI. Summary + action items are generated via the configured
+ * LLM provider (Groq → OpenRouter → OpenAI) when one is available.
  */
 export const transcribeMeeting = action({
   args: { code: v.string(), storageId: v.id("_storage") },
   handler: async (ctx, { code, storageId }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("Invalid meeting code.");
-    const key = process.env.ASSEMBLYAI_API_KEY;
-    if (!key)
+    const deepgramKey = process.env.DEEPGRAM_API_KEY;
+    const assemblyKey = process.env.ASSEMBLYAI_API_KEY;
+    if (!deepgramKey && !assemblyKey)
       throw new Error(
-        "AI transcription isn't configured — add ASSEMBLYAI_API_KEY in the project Keys tab.",
+        "AI transcription isn't configured — add DEEPGRAM_API_KEY or ASSEMBLYAI_API_KEY in the project Keys tab.",
       );
 
     const url = await ctx.storage.getUrl(storageId);
     if (url === null) throw new Error("Couldn't find the recording to transcribe.");
     const audio = await (await fetch(url)).arrayBuffer();
 
-    const upload = await fetch("https://api.assemblyai.com/v2/upload", {
-      method: "POST",
-      headers: {
-        authorization: key,
-        "content-type": "application/octet-stream",
-      },
-      body: audio,
-    });
-    const { upload_url } = (await upload.json()) as { upload_url: string };
+    let lines: string;
+    let text: string;
+    let sttModel: string;
 
-    const submit = await fetch("https://api.assemblyai.com/v2/transcript", {
-      method: "POST",
-      headers: { authorization: key, "content-type": "application/json" },
-      body: JSON.stringify({
-        audio_url: upload_url,
-        speaker_labels: true,
-        summarization: true,
-        summary_type: "bullets",
-      }),
-    });
-    const { id } = (await submit.json()) as { id: string };
-
-    let transcript: {
-      status: string;
-      text?: string;
-      summary?: string;
-      utterances?: { speaker: string; text: string }[];
-      error?: string;
-    } = { status: "queued" };
-    for (let i = 0; i < 60; i++) {
-      await sleep(3000);
-      const poll = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
-        headers: { authorization: key },
-      });
-      transcript = (await poll.json()) as typeof transcript;
-      if (transcript.status === "completed" || transcript.status === "error") break;
-    }
-    if (transcript.status !== "completed") {
-      throw new Error(
-        transcript.error ?? "Transcription timed out. Try a shorter recording.",
+    if (deepgramKey) {
+      // Deepgram pre-recorded: raw audio POST, diarized utterances.
+      const res = await fetch(
+        "https://api.deepgram.com/v1/listen?model=nova-3&utterances=true&diarize=true&smart_format=true",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Token ${deepgramKey}`,
+            "content-type": "application/octet-stream",
+          },
+          body: audio,
+        },
       );
-    }
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(
+          `Deepgram transcription failed (${res.status}): ${body.slice(0, 200)}`,
+        );
+      }
+      const data = (await res.json()) as {
+        results?: {
+          channels?: { alternatives?: { transcript?: string }[] }[];
+          utterances?: { speaker?: number; transcript?: string }[];
+        };
+      };
+      const alt = data.results?.channels?.[0]?.alternatives?.[0];
+      const utterances = data.results?.utterances ?? [];
+      if (!alt?.transcript) {
+        throw new Error(
+          "Deepgram returned no transcript — the recording may be silent.",
+        );
+      }
+      text = alt.transcript;
+      lines =
+        utterances.length > 0
+          ? utterances
+              .map((u) => `Speaker ${(u.speaker ?? 0) + 1}: ${u.transcript}`)
+              .join("\n")
+          : text;
+      sttModel = "deepgram-nova-3";
+    } else {
+      // AssemblyAI fallback: upload → transcript job → poll.
+      const upload = await fetch("https://api.assemblyai.com/v2/upload", {
+        method: "POST",
+        headers: {
+          authorization: assemblyKey!,
+          "content-type": "application/octet-stream",
+        },
+        body: audio,
+      });
+      const { upload_url } = (await upload.json()) as { upload_url: string };
 
-    const lines = (transcript.utterances ?? [])
-      .map((u) => `Speaker ${u.speaker.replace("S", "")}: ${u.text}`)
-      .join("\n");
-    const text = transcript.text ?? lines;
-    const summary = transcript.summary ?? "No summary generated.";
+      const submit = await fetch("https://api.assemblyai.com/v2/transcript", {
+        method: "POST",
+        headers: {
+          authorization: assemblyKey!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          audio_url: upload_url,
+          speaker_labels: true,
+          summarization: true,
+          summary_type: "bullets",
+        }),
+      });
+      const { id } = (await submit.json()) as { id: string };
+
+      let transcript: {
+        status: string;
+        text?: string;
+        summary?: string;
+        utterances?: { speaker: string; text: string }[];
+        error?: string;
+      } = { status: "queued" };
+      for (let i = 0; i < 60; i++) {
+        await sleep(3000);
+        const poll = await fetch(
+          `https://api.assemblyai.com/v2/transcript/${id}`,
+          { headers: { authorization: assemblyKey! } },
+        );
+        transcript = (await poll.json()) as typeof transcript;
+        if (transcript.status === "completed" || transcript.status === "error")
+          break;
+      }
+      if (transcript.status !== "completed") {
+        throw new Error(
+          transcript.error ?? "Transcription timed out. Try a shorter recording.",
+        );
+      }
+      lines = (transcript.utterances ?? [])
+        .map((u) => `Speaker ${u.speaker.replace("S", "")}: ${u.text}`)
+        .join("\n");
+      text = transcript.text ?? lines;
+      sttModel = "assemblyai-universal-2";
+
+      if (transcript.summary) {
+        await ctx.runMutation(internal.aiData.storeAiData, {
+          code: normalized,
+          kind: "summary",
+          content: transcript.summary,
+          model: sttModel,
+        });
+      }
+    }
 
     await ctx.runMutation(internal.aiData.storeAiData, {
       code: normalized,
       kind: "transcript",
       content: lines || text || "No speech detected.",
-      model: "assemblyai-universal-2",
-    });
-    await ctx.runMutation(internal.aiData.storeAiData, {
-      code: normalized,
-      kind: "summary",
-      content: summary,
-      model: "assemblyai-universal-2",
+      model: sttModel,
     });
 
-    if (process.env.OPENAI_API_KEY && (lines || text)) {
-      const items = await extractActionItems(lines || text);
-      if (items.length > 0) {
+    // LLM-powered summary + action items when a provider is configured.
+    let summary = "";
+    if (process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY) {
+      const src = lines || text;
+      try {
+        const { text: s, model } = await llmChat([
+          {
+            role: "system",
+            content:
+              "You summarize meeting transcripts. Respond with: an Overview (2-3 sentences), Key Points (bullets), and Decisions (bullets). Keep it tight, no preamble.",
+          },
+          { role: "user", content: src.slice(0, 28_000) },
+        ]);
+        summary = s;
         await ctx.runMutation(internal.aiData.storeAiData, {
           code: normalized,
-          kind: "actionItems",
-          items,
-          model: "gpt-4o-mini",
+          kind: "summary",
+          content: s,
+          model,
         });
+        const items = await extractActionItems(src);
+        if (items.length > 0) {
+          await ctx.runMutation(internal.aiData.storeAiData, {
+            code: normalized,
+            kind: "actionItems",
+            items,
+            model,
+          });
+        }
+      } catch {
+        // Non-fatal: transcript is still saved; summary can be requested later.
       }
     }
 
@@ -145,16 +299,11 @@ export const transcribeMeeting = action({
   },
 });
 
-/** Summarize an existing transcript + extract action items via OpenAI. */
+/** Summarize an existing transcript + extract action items via the LLM provider. */
 export const summarizeTranscript = action({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const normalized = normalizeCode(code);
-    const key = process.env.OPENAI_API_KEY;
-    if (!key)
-      throw new Error(
-        "AI summary isn't configured — add OPENAI_API_KEY in the project Keys tab.",
-      );
 
     const latest = await loadAiData(ctx, normalized, "transcript");
     const transcript = latest[0]?.content ?? "";
@@ -163,7 +312,7 @@ export const summarizeTranscript = action({
         "No transcript yet — record and transcribe the meeting first.",
       );
 
-    const completion = await openaiChat(key, [
+    const { text, model } = await llmChat([
       {
         role: "system",
         content:
@@ -174,8 +323,8 @@ export const summarizeTranscript = action({
     await ctx.runMutation(internal.aiData.storeAiData, {
       code: normalized,
       kind: "summary",
-      content: completion,
-      model: "gpt-4o-mini",
+      content: text,
+      model,
     });
 
     const items = await extractActionItems(transcript);
@@ -184,7 +333,7 @@ export const summarizeTranscript = action({
         code: normalized,
         kind: "actionItems",
         items,
-        model: "gpt-4o-mini",
+        model,
       });
     }
     await notifyHost(
@@ -194,7 +343,7 @@ export const summarizeTranscript = action({
       "Your meeting summary is available.",
       `/collab/${normalized}`,
     );
-    return { summary: completion, items };
+    return { summary: text, items };
   },
 });
 
@@ -203,11 +352,10 @@ export const askAssistant = action({
   args: { code: v.string(), question: v.string() },
   handler: async (ctx, { code, question }) => {
     const normalized = normalizeCode(code);
-    const key = process.env.OPENAI_API_KEY;
-    if (!key)
+    if (!pickLlm())
       return {
         answer:
-          "The AI assistant isn't configured — add OPENAI_API_KEY in the project Keys tab.",
+          "The AI assistant isn't configured — add GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.",
         grounded: false,
       };
 
@@ -231,7 +379,7 @@ export const askAssistant = action({
       .filter(Boolean)
       .join("\n\n");
 
-    const answer = await openaiChat(key, [
+    const { text: answer } = await llmChat([
       {
         role: "system",
         content:
@@ -243,36 +391,34 @@ export const askAssistant = action({
   },
 });
 
-/** Translate a caption line into the target language (via OpenAI). */
+/** Translate a caption line into the target language (via the LLM provider). */
 export const translateText = action({
   args: { text: v.string(), target: v.string() },
   handler: async (ctx, { text, target }) => {
-    const key = process.env.OPENAI_API_KEY;
-    if (!key)
-      throw new Error(
-        "Live translation isn't configured — add OPENAI_API_KEY in the project Keys tab.",
-      );
-    return openaiChat(key, [
+    if (!pickLlm()) throw new Error(LLM_NOT_CONFIGURED);
+    const { text: translated } = await llmChat([
       {
         role: "system",
         content: `Translate the user's message into ${target}. Return only the translation.`,
       },
       { role: "user", content: text },
     ]);
+    return translated;
   },
 });
 
 /**
  * Generate structured meeting minutes from the transcript + agenda. Uses
- * OpenAI when OPENAI_API_KEY is set; otherwise falls back to a deterministic
- * summary assembled from the agenda and the opening transcript lines, so the
- * feature works without credentials (never fake data).
+ * the LLM provider (Groq → OpenRouter → OpenAI) when a key is set; otherwise
+ * falls back to a deterministic summary assembled from the agenda and the
+ * opening transcript lines, so the feature works without credentials
+ * (never fake data).
  */
 export const generateMinutes = action({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const normalized = normalizeCode(code);
-    const key = process.env.OPENAI_API_KEY;
+    const provider = pickLlm();
 
     const [transcripts, agenda] = await Promise.all([
       loadAiData(ctx, normalized, "transcript"),
@@ -295,8 +441,9 @@ export const generateMinutes = action({
     }
 
     let minutes: string;
-    if (key) {
-      minutes = await openaiChat(key, [
+    let model: string;
+    if (provider) {
+      const { text, model: m } = await llmChat([
         {
           role: "system",
           content:
@@ -312,6 +459,8 @@ export const generateMinutes = action({
             .join("\n\n"),
         },
       ]);
+      minutes = text;
+      model = m;
     } else {
       // Deterministic fallback: real data, just not LLM-polished.
       const heads = transcript
@@ -331,13 +480,14 @@ export const generateMinutes = action({
       ]
         .filter(Boolean)
         .join("\n\n");
+      model = "agenda-fallback";
     }
 
     await ctx.runMutation(internal.aiData.storeAiData, {
       code: normalized,
       kind: "minutes",
       content: minutes,
-      model: key ? "gpt-4o-mini" : "agenda-fallback",
+      model,
     });
 
     await notifyHost(
@@ -353,32 +503,9 @@ export const generateMinutes = action({
 
 // ---- helpers ------------------------------------------------------------
 
-async function openaiChat(
-  key: string,
-  messages: { role: "system" | "user"; content: string }[],
-): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${key}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ model: "gpt-4o-mini", messages, temperature: 0.4 }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`OpenAI request failed (${res.status}): ${body.slice(0, 200)}`);
-  }
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  return data.choices?.[0]?.message?.content?.trim() ?? "";
-}
-
 async function extractActionItems(transcript: string): Promise<string[]> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return [];
-  const out = await openaiChat(key, [
+  if (!pickLlm()) return [];
+  const { text } = await llmChat([
     {
       role: "system",
       content:
@@ -386,8 +513,8 @@ async function extractActionItems(transcript: string): Promise<string[]> {
     },
     { role: "user", content: transcript.slice(0, 28_000) },
   ]);
-  if (out.toUpperCase() === "NONE") return [];
-  return out
+  if (text.toUpperCase() === "NONE") return [];
+  return text
     .split("\n")
     .map((l) => l.replace(/^\d+[.)]\s*/, "").replace(/^Task:\s*/i, "").trim())
     .filter(Boolean)
