@@ -7,8 +7,15 @@ import { EgressStatus } from "@livekit/protocol";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import { auth } from "./auth";
 
 const http = httpRouter();
+
+// Convex Auth HTTP routes: OAuth provider callbacks (/api/auth/callback/*,
+// /api/auth/signin/*) plus the OpenID discovery + JWKS endpoints that power
+// JWT verification. Without these, OAuth sign-in (GitHub/Google) fails on the
+// provider callback while email-OTP keeps working (it has no HTTP callback).
+auth.addHttpRoutes(http);
 
 async function hexHmacSha256(secret: string, body: string): Promise<string> {
   const enc = new TextEncoder();
