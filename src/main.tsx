@@ -89,7 +89,21 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+// Freebuff injects VITE_CONVEX_URL at build time, but older published builds
+// carried a stale deployment URL (optimistic-lemur-110) that has none of the
+// Keys-tab env vars and generates OAuth callbacks on the wrong host — that
+// breaks Google/GitHub sign-in with `invalid_client` (client_id=undefined).
+// The project's managed Convex deployment is secret-bird-498: that's where
+// `convex dev`/`deploy` push code, where VLY_CONVEX_AUTH_ISSUER points, where
+// the Keys-tab env vars live, and where the OAuth callbacks are registered.
+// Prefer it unless the injected URL already targets it.
+const MANAGED_CONVEX_URL = "https://secret-bird-498.convex.cloud";
+const injectedUrl = import.meta.env.VITE_CONVEX_URL;
+const convexUrl =
+  injectedUrl && injectedUrl.includes("secret-bird-498.convex.cloud")
+    ? injectedUrl
+    : MANAGED_CONVEX_URL;
+const convex = new ConvexReactClient(convexUrl);
 
 
 
