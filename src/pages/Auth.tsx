@@ -202,7 +202,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (error) {
       console.error("GitHub login error:", error);
       setError(
-        "GitHub sign-in failed — make sure GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set in the project Keys tab.",
+        "GitHub sign-in failed — check that AUTH_GITHUB_ID / AUTH_GITHUB_SECRET are in the Keys tab and the OAuth app's callback URL is exactly https://secret-bird-498.convex.site/api/auth/callback/github",
       );
       setIsLoading(false);
     }
@@ -217,7 +217,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (error) {
       console.error("Google login error:", error);
       setError(
-        "Google sign-in failed — make sure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in the project Keys tab.",
+        "Google sign-in failed — check that AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET are in the Keys tab and the OAuth client's redirect URI is exactly https://secret-bird-498.convex.site/api/auth/callback/google",
       );
       setIsLoading(false);
     }
