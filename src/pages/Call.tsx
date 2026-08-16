@@ -637,7 +637,7 @@ export default function Call() {
                 <Info className="size-4" />
               </button>
 
-              <ThemeToggle className="hidden sm:flex" />
+              <ThemeToggle className="flex" />
 
               {/* view mode toggle */}
               <div className="hidden items-center rounded-full border border-border/60 bg-muted/50 p-0.5 md:flex">
@@ -817,7 +817,7 @@ export default function Call() {
             ) : (
               <div
                 className={cn(
-                  "grid h-full w-full content-center gap-3 sm:gap-4",
+                  "grid h-full w-full content-center gap-3 overflow-y-auto sm:gap-4",
                   view === "speaker" && activeSpeakerId
                     ? "grid-cols-1 lg:grid-cols-2"
                     : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -1426,7 +1426,7 @@ export default function Call() {
       {!entered && (
         <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto bg-background p-6">
           <div className="w-full max-w-md">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => navigate("/")}
@@ -1434,23 +1434,26 @@ export default function Call() {
               >
                 V<span className="text-gradient">Collab</span>
               </button>
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={() => void signOut().then(() => navigate("/"))}
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground/70 transition-colors hover:text-foreground"
-                >
-                  <LogOut className="size-3.5" />
-                  Sign out
-                </button>
-              ) : (
-                <Link
-                  to={`/auth?returnTo=/call/${code}`}
-                  className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
-                >
-                  Sign in to keep meetings
-                </Link>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                <ThemeToggle className="flex" />
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={() => void signOut().then(() => navigate("/"))}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground/70 transition-colors hover:text-foreground"
+                  >
+                    <LogOut className="size-3.5" />
+                    Sign out
+                  </button>
+                ) : (
+                  <Link
+                    to={`/auth?returnTo=/call/${code}`}
+                    className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                  >
+                    Sign in to keep meetings
+                  </Link>
+                )}
+              </div>
             </div>
 
             <p className="mt-10 text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground/70">

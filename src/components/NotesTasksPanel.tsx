@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useMutation, useQuery } from "convex/react";
+import type { Id } from "@/convex/_generated/dataModel";
+import { cn } from "@/lib/utils";
 
 const COLUMNS = ["todo", "inProgress", "review", "done"] as const;
 const COLUMN_LABELS: Record<(typeof COLUMNS)[number], string> = {
@@ -151,6 +153,7 @@ function TasksTab({ code }: { code: string }) {
   const deleteCard = useMutation(api.collab.deleteCard);
   const [title, setTitle] = useState("");
   const [assignee, setAssignee] = useState("");
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
   const byColumn = useMemo(() => {
     const map: Record<string, NonNullable<typeof cards>> = {
@@ -205,58 +208,98 @@ function TasksTab({ code }: { code: string }) {
 
       <div className="flex-1 overflow-y-auto p-3">
         {cards !== undefined && cards.length === 0 && (
-          <p className="pt-8 text-center text-sm text-muted-foreground/70">
-            No tasks yet — add one above.
+          <p className="pt-4 text-center text-sm text-muted-foreground/70">
+            No tasks yet — add one above, then drag cards between columns.
           </p>
         )}
         {COLUMNS.map((col) => {
           const colCards = byColumn[col] ?? [];
-          if (colCards.length === 0) return null;
+          const isOver = dragOverCol === col;
           return (
-            <div key={col} className="mb-4">
+            <div
+              key={col}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDragOverCol(col);
+              }}
+              onDragLeave={(e) => {
+                // only clear when the pointer actually leaves the column
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setDragOverCol((prev) => (prev === col ? null : prev));
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData("text/plain");
+                if (id) void moveCard({ cardId: id as Id<"kanbanCards">, column: col });
+                setDragOverCol(null);
+              }}
+              className={cn(
+                "mb-3 rounded-xl border p-2 transition-colors",
+                isOver
+                  ? "border-primary/60 bg-primary/10"
+                  : "border-border/50",
+              )}
+            >
               <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
                 {COLUMN_LABELS[col]} · {colCards.length}
               </p>
-              <div className="space-y-2">
-                {colCards.map((card) => (
-                  <div
-                    key={card._id}
-                    className="group rounded-xl border border-border/60 bg-muted/50 p-2.5"
-                  >
-                    <p className="text-sm text-foreground">{card.title}</p>
-                    {(card.assignee || card.priority) && (
-                      <p className="mt-1 text-[11px] text-muted-foreground/70">
-                        {card.assignee && `→ ${card.assignee}`}
-                        {card.assignee && card.priority && " · "}
-                        {card.priority && <span className="capitalize">{card.priority}</span>}
-                      </p>
-                    )}
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <select
-                        value={card.column}
-                        onChange={(e) => void moveCard({ cardId: card._id, column: e.target.value })}
-                        aria-label="Move task"
-                        className="h-7 flex-1 rounded-md border border-border/60 bg-muted/60 px-1.5 text-[11px] text-muted-foreground"
-                      >
-                        {COLUMNS.map((c) => (
-                          <option key={c} value={c}>
-                            {COLUMN_LABELS[c]}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => void deleteCard({ cardId: card._id })}
-                        aria-label="Delete task"
-                        title="Delete task"
-                        className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-600 dark:text-red-400 group-hover:opacity-100"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
+              {colCards.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/40">
+                  Drop tasks here
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {colCards.map((card) => (
+                    <div
+                      key={card._id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", String(card._id));
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => setDragOverCol(null)}
+                      className={cn(
+                        "group cursor-grab rounded-xl border border-border/60 bg-muted/50 p-2.5 transition-shadow active:cursor-grabbing",
+                        isOver && "opacity-60",
+                      )}
+                    >
+                      <p className="text-sm text-foreground">{card.title}</p>
+                      {(card.assignee || card.priority) && (
+                        <p className="mt-1 text-[11px] text-muted-foreground/70">
+                          {card.assignee && `→ ${card.assignee}`}
+                          {card.assignee && card.priority && " · "}
+                          {card.priority && <span className="capitalize">{card.priority}</span>}
+                        </p>
+                      )}
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <select
+                          value={card.column}
+                          onChange={(e) => void moveCard({ cardId: card._id, column: e.target.value })}
+                          aria-label="Move task"
+                          className="h-7 flex-1 rounded-md border border-border/60 bg-muted/60 px-1.5 text-[11px] text-muted-foreground"
+                        >
+                          {COLUMNS.map((c) => (
+                            <option key={c} value={c}>
+                              {COLUMN_LABELS[c]}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void deleteCard({ cardId: card._id })}
+                          aria-label="Delete task"
+                          title="Delete task"
+                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-600 dark:text-red-400 group-hover:opacity-100"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

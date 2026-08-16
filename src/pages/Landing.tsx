@@ -464,8 +464,8 @@ export default function Landing() {
                 <ul className="mt-7 space-y-3 text-sm">
                   {[
                     ["Captions", "Live captions in the call, powered by your browser."],
-                    ["Transcript", "Speaker-labeled transcription via AssemblyAI."],
-                    ["Summary & action items", "Overview, decisions, and follow-ups via OpenAI."],
+                    ["Transcript", "Speaker-labeled transcription via Deepgram."],
+                    ["Summary & action items", "Overview, decisions, and follow-ups via Groq."],
                     ["Meeting assistant", "Ask questions — answers are grounded in the actual transcript."],
                   ].map(([title, body]) => (
                     <li key={title} className="flex items-start gap-3">
