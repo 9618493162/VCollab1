@@ -43,13 +43,15 @@ describe("Auth page", () => {
     baseAuth.signIn.mockClear();
   });
 
-  it("sign-in mode welcomes the user back", () => {
+  it("sign-in mode welcomes the user back with the password form", () => {
     renderAuth();
     expect(screen.getByText("Welcome back")).toBeInTheDocument();
-    expect(
-      screen.getByText("Sign in to continue to VCollab — we'll send a sign-in code"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sign in to continue to VCollab")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Password")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Full name")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^sign in$/i }),
+    ).toBeInTheDocument();
   });
 
   it("register mode collects a full name and email", () => {
@@ -59,10 +61,33 @@ describe("Auth page", () => {
     expect(screen.getByPlaceholderText("name@example.com")).toBeInTheDocument();
   });
 
-  it("submits the email to the real OTP sign-in and shows the code step", async () => {
+  it("submits the email to the real password sign-in flow", async () => {
     const user = userEvent.setup();
     renderAuth();
 
+    await user.type(
+      screen.getByPlaceholderText("name@example.com"),
+      "me@example.com",
+    );
+    await user.type(screen.getByPlaceholderText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() => {
+      expect(baseAuth.signIn).toHaveBeenCalledWith("password", {
+        flow: "signIn",
+        email: "me@example.com",
+        password: "password123",
+      });
+    });
+  });
+
+  it("can fall back to the OTP flow and shows the code step", async () => {
+    const user = userEvent.setup();
+    renderAuth();
+
+    await user.click(
+      screen.getByRole("button", { name: /sign in with a code instead/i }),
+    );
     await user.type(
       screen.getByPlaceholderText("name@example.com"),
       "me@example.com",
@@ -99,7 +124,9 @@ describe("Auth page", () => {
     expect(signInInstead).toBeInTheDocument();
 
     // Submission is blocked while the duplicate warning is shown.
-    expect(screen.getByRole("button", { name: /^continue$/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^create account$/i }),
+    ).toBeDisabled();
     await user.click(signInInstead);
     expect(screen.getByText("Welcome back")).toBeInTheDocument();
   });
@@ -125,6 +152,9 @@ describe("Auth page", () => {
     await user.type(
       screen.getByPlaceholderText("name@example.com"),
       "alice@example.com",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /register with a sign-in code instead/i }),
     );
     await user.click(screen.getByRole("button", { name: /^continue$/i }));
 

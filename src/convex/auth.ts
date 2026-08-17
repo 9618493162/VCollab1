@@ -2,7 +2,9 @@
 
 import { convexAuth } from "@convex-dev/auth/server";
 import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
+import { Password } from "@convex-dev/auth/providers/Password";
 import { emailOtp } from "./auth/emailOtp";
+import { passwordReset } from "./auth/passwordReset";
 import GitHub from "@auth/core/providers/github";
 import Google from "@auth/core/providers/google";
 
@@ -27,8 +29,32 @@ function postAuthBaseUrl() {
   return APP_ORIGIN;
 }
 
+// Email + password (primary login). Passwords are hashed server-side with
+// Scrypt by the library; the reset flow emails a 6-digit code via the same
+// Freebuff transport used for sign-in OTPs.
+const password = Password({
+  profile: (params: Record<string, unknown>) => {
+    const email =
+      typeof params.email === "string" ? params.email.trim().toLowerCase() : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error("Please enter a valid email address.");
+    }
+    const name =
+      typeof params.name === "string" && params.name.trim()
+        ? params.name.trim().slice(0, 60)
+        : undefined;
+    const profile: { email: string; name?: string; isAnonymous: boolean } = {
+      email,
+      isAnonymous: false,
+    };
+    if (name) profile.name = name;
+    return profile;
+  },
+  reset: passwordReset,
+});
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [emailOtp, Anonymous, GitHub, Google],
+  providers: [emailOtp, Anonymous, GitHub, Google, password],
   callbacks: {
     // Redirect OAuth/OTP sign-ins back to the app (never the Convex site).
     async redirect({ redirectTo }) {

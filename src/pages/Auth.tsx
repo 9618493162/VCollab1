@@ -18,9 +18,21 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useConvex, useMutation } from "convex/react";
-import { ArrowRight, Github, Loader2, Mail, User, UserX } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Github,
+  Loader2,
+  Lock,
+  Mail,
+  User,
+  UserX,
+} from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -41,6 +53,18 @@ function resolveRedirectAfterAuth(
 function friendlyError(raw: unknown, fallback: string) {
   const message = raw instanceof Error ? raw.message : String(raw);
   const lower = message.toLowerCase();
+  if (
+    lower.includes("invalid credentials") ||
+    lower.includes("invalidsecret")
+  ) {
+    return "Incorrect email or password.";
+  }
+  if (lower.includes("invalid password")) {
+    return "Password must be at least 8 characters.";
+  }
+  if (lower.includes("already") || lower.includes("exists")) {
+    return "An account with this email already exists. Try signing in instead.";
+  }
   if (lower.includes("invalid") || lower.includes("email")) {
     return "Please enter a valid email address.";
   }
@@ -55,6 +79,51 @@ function friendlyError(raw: unknown, fallback: string) {
   return fallback;
 }
 
+function passwordStrength(password: string): {
+  score: 0 | 1 | 2 | 3 | 4;
+  label: string;
+} {
+  if (!password) return { score: 0, label: "" };
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+  const clamped = Math.min(score, 4) as 0 | 1 | 2 | 3 | 4;
+  const labels = ["", "Weak", "Fair", "Good", "Strong"];
+  return { score: clamped, label: labels[clamped] };
+}
+
+function StrengthMeter({ password }: { password: string }) {
+  const strength = passwordStrength(password);
+  if (!strength.label) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      <div className="flex gap-1">
+        {[1, 2, 3, 4].map((i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-1 flex-1 rounded-full",
+              i <= strength.score
+                ? strength.score <= 1
+                  ? "bg-red-400"
+                  : strength.score === 2
+                    ? "bg-amber-400"
+                    : "bg-emerald-400"
+                : "bg-muted",
+            )}
+          />
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {strength.label} password
+      </p>
+    </div>
+  );
+}
+
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
@@ -67,15 +136,46 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     searchParams.get("mode") === "register" ? "register" : "signin";
   const convex = useConvex();
   const updateProfile = useMutation(api.settings.updateProfile);
-  const [step, setStep] = useState<"signIn" | { email: string; name?: string }>(
-    "signIn",
-  );
+
+  // primary flow is email + password; OTP remains available as a fallback
+  const [authMethod, setAuthMethod] = useState<"password" | "otp">("password");
+  const [step, setStep] =
+    useState<
+      | "signIn"
+      | "forgot"
+      | { kind: "otp"; email: string; name?: string }
+      | { kind: "reset"; email: string }
+    >("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [emailExists, setEmailExists] = useState<boolean | null>(null);
+
+  // reset flow fields
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // "Remember me" persists the email for the next visit (the session itself
+  // is managed server-side by Convex Auth).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("vcollab-remember-email");
+      if (saved) {
+        setEmail(saved);
+        setRememberMe(true);
+      }
+    } catch {
+      // storage unavailable; ignore
+    }
+  }, []);
 
   // Duplicate-account protection (register mode): debounce a real backend
   // check so users creating an account learn early if one already exists.
@@ -111,6 +211,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     if (next === mode) return;
     setStep("signIn");
     setError(null);
+    setPassword("");
+    setConfirmPassword("");
     const params = new URLSearchParams(searchParams);
     if (next === "signin") params.delete("mode");
     else params.set("mode", "register");
@@ -122,6 +224,127 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     }
   }, [authLoading, isAuthenticated, navigate, redirect]);
+
+  const toggleRemember = (checked: boolean) => {
+    setRememberMe(checked);
+    try {
+      if (checked) localStorage.setItem("vcollab-remember-email", email.trim());
+      else localStorage.removeItem("vcollab-remember-email");
+    } catch {
+      // storage unavailable; ignore
+    }
+  };
+
+  /** Email + password sign-in / registration (primary flow). */
+  const handlePasswordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (mode === "register") {
+      if (name.trim().length < 2) {
+        setError("Please enter your full name.");
+        return;
+      }
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords don't match.");
+        return;
+      }
+      if (emailExists === true) {
+        setError("An account with this email already exists. Please sign in instead.");
+        return;
+      }
+    } else if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const params: Record<string, string> = {
+        flow: mode === "register" ? "signUp" : "signIn",
+        email: trimmedEmail,
+        password,
+      };
+      if (mode === "register" && name.trim()) {
+        params.name = name.trim();
+      }
+      await signIn("password", params);
+      if (rememberMe) toggleRemember(true);
+      // navigate(redirect) happens reactively once the auth state flips.
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Password auth error:", error);
+      setError(
+        friendlyError(error, "We couldn't sign you in. Please try again."),
+      );
+      setIsLoading(false);
+    }
+  };
+
+  /** Request a password-reset code (OTP to the email). */
+  const handleForgotSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await signIn("password", { flow: "reset", email: trimmedEmail });
+    } catch (error) {
+      // Don't leak whether the account exists — the code step is shown either
+      // way and only completes for real accounts.
+      console.warn("Reset request error:", error);
+    }
+    setIsLoading(false);
+    setStep({ kind: "reset", email: trimmedEmail });
+  };
+
+  /** Verify the reset code and set the new password. */
+  const handleResetSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (step === "signIn" || step === "forgot" || step.kind !== "reset") return;
+    if (resetCode.length !== 6) {
+      setError("Enter the 6-digit code we emailed you.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await signIn("password", {
+        flow: "reset-verification",
+        email: step.email,
+        code: resetCode,
+        newPassword,
+      });
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Password reset error:", error);
+      setError(
+        friendlyError(error, "That code is invalid or expired. Please try again."),
+      );
+      setIsLoading(false);
+      setResetCode("");
+    }
+  };
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -139,6 +362,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
       setStep({
+        kind: "otp",
         email: formData.get("email") as string,
         name: mode === "register" ? name.trim() : undefined,
       });
@@ -163,7 +387,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       // persist the name captured during registration with the real profile
       // mutation. A failure here doesn't block sign-in — the onboarding
       // wizard collects the name later if needed.
-      const pendingName = typeof step === "string" ? undefined : step.name;
+      const pendingName =
+        step === "signIn" || step === "forgot" || step.kind !== "otp"
+          ? undefined
+          : step.name;
       if (pendingName) {
         try {
           await updateProfile({ name: pendingName });
@@ -197,7 +424,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      // Starts the real GitHub OAuth flow; lands back on `redirect` after auth.
       await signIn("github", { redirectTo: redirect });
     } catch (error) {
       console.error("GitHub login error:", error);
@@ -212,7 +438,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      // Starts the real Google OAuth flow; lands back on `redirect` after auth.
       await signIn("google", { redirectTo: redirect });
     } catch (error) {
       console.error("Google login error:", error);
@@ -222,6 +447,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setIsLoading(false);
     }
   };
+
+  const showDivider = step === "signIn";
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden">
@@ -242,7 +469,172 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       <div className="relative z-10 flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-sm">
           <Card className="glass-float depth-3 rounded-3xl border-none">
-            {step === "signIn" ? (
+            {step === "forgot" ? (
+              <>
+                <CardHeader className="text-center">
+                  <CardTitle className="font-display text-xl font-bold tracking-tight">
+                    Reset your password
+                  </CardTitle>
+                  <CardDescription>
+                    Enter your email and we'll send a 6-digit reset code.
+                  </CardDescription>
+                </CardHeader>
+                <form onSubmit={handleForgotSubmit}>
+                  <CardContent>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        name="email"
+                        placeholder="name@example.com"
+                        type="email"
+                        autoComplete="email"
+                        className="h-11 rounded-xl pl-9"
+                        disabled={isLoading}
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </div>
+                    {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+                  </CardContent>
+                  <CardFooter className="flex-col gap-2">
+                    <Button
+                      type="submit"
+                      className="press w-full rounded-xl btn-glow"
+                      disabled={isLoading || !EMAIL_RE.test(email.trim())}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Sending…
+                        </>
+                      ) : (
+                        <>
+                          Send reset code
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => {
+                        setStep("signIn");
+                        setError(null);
+                      }}
+                      disabled={isLoading}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" /> Back to sign in
+                    </Button>
+                  </CardFooter>
+                </form>
+              </>
+            ) : step !== "signIn" && step.kind === "reset" ? (
+              <>
+                <CardHeader className="text-center">
+                  <CardTitle className="font-display text-xl font-bold tracking-tight">
+                    Choose a new password
+                  </CardTitle>
+                  <CardDescription>
+                    We emailed a 6-digit code to{" "}
+                    <span className="font-medium">{step.email}</span>
+                  </CardDescription>
+                </CardHeader>
+                <form onSubmit={handleResetSubmit}>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-center">
+                      <InputOTP
+                        value={resetCode}
+                        onChange={setResetCode}
+                        maxLength={6}
+                        disabled={isLoading}
+                      >
+                        <InputOTPGroup>
+                          {Array.from({ length: 6 }).map((_, index) => (
+                            <InputOTPSlot key={index} index={index} />
+                          ))}
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="New password (min 8 characters)"
+                        type={showNewPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        className="h-11 rounded-xl pl-9 pr-10"
+                        disabled={isLoading}
+                        required
+                        minLength={8}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                        className="absolute right-3 top-3 text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <StrengthMeter password={newPassword} />
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Confirm new password"
+                        type={showNewPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        className="h-11 rounded-xl pl-9"
+                        disabled={isLoading}
+                        required
+                        minLength={8}
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      />
+                    </div>
+                    {error && <p className="text-sm text-destructive">{error}</p>}
+                  </CardContent>
+                  <CardFooter className="flex-col gap-2">
+                    <Button
+                      type="submit"
+                      className="press w-full rounded-xl btn-glow"
+                      disabled={
+                        isLoading ||
+                        resetCode.length !== 6 ||
+                        newPassword.length < 8 ||
+                        newPassword !== confirmNewPassword
+                      }
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Resetting…
+                        </>
+                      ) : (
+                        <>
+                          Reset password
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => {
+                        setStep("forgot");
+                        setError(null);
+                      }}
+                      disabled={isLoading}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" /> Use a different email
+                    </Button>
+                  </CardFooter>
+                </form>
+              </>
+            ) : (
               <>
                 <CardHeader className="text-center">
                   <CardTitle className="font-display text-xl font-bold tracking-tight">
@@ -250,37 +642,39 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </CardTitle>
                   <CardDescription>
                     {mode === "register"
-                      ? "Enter your name and email and we'll send a code to get you started"
-                      : "Sign in to continue to VCollab — we'll send a sign-in code"}
+                      ? "Start collaborating in minutes — it's free"
+                      : "Sign in to continue to VCollab"}
                   </CardDescription>
                 </CardHeader>
-                <form onSubmit={handleEmailSubmit}>
-                  <CardContent>
-                    {mode === "register" && (
+
+                {step === "signIn" && authMethod === "password" ? (
+                  <form onSubmit={handlePasswordSubmit}>
+                    <CardContent>
+                      {mode === "register" && (
+                        <div className="relative mb-2">
+                          <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            name="name"
+                            placeholder="Full name"
+                            type="text"
+                            autoComplete="name"
+                            className="h-11 rounded-xl pl-9"
+                            disabled={isLoading}
+                            required
+                            minLength={2}
+                            maxLength={60}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                          />
+                        </div>
+                      )}
                       <div className="relative mb-2">
-                        <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          name="name"
-                          placeholder="Full name"
-                          type="text"
-                          autoComplete="name"
-                          className="h-11 rounded-xl pl-9"
-                          disabled={isLoading}
-                          required
-                          minLength={2}
-                          maxLength={60}
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </div>
-                    )}
-                    <div className="relative flex items-center gap-2">
-                      <div className="relative flex-1">
                         <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           name="email"
                           placeholder="name@example.com"
                           type="email"
+                          autoComplete="email"
                           className="h-11 rounded-xl pl-9"
                           disabled={isLoading}
                           required
@@ -288,36 +682,292 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           onChange={(e) => setEmail(e.target.value)}
                         />
                       </div>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          name="password"
+                          placeholder={
+                            mode === "register"
+                              ? "Password (min 8 characters)"
+                              : "Password"
+                          }
+                          type={showPassword ? "text" : "password"}
+                          autoComplete={
+                            mode === "register" ? "new-password" : "current-password"
+                          }
+                          className="h-11 rounded-xl pl-9 pr-10"
+                          disabled={isLoading}
+                          required
+                          minLength={mode === "register" ? 8 : undefined}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="absolute right-3 top-3 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {mode === "register" && (
+                        <>
+                          <StrengthMeter password={password} />
+                          <div className="relative mt-2">
+                            <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              name="confirmPassword"
+                              placeholder="Confirm password"
+                              type={showPassword ? "text" : "password"}
+                              autoComplete="new-password"
+                              className="h-11 rounded-xl pl-9"
+                              disabled={isLoading}
+                              required
+                              minLength={8}
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {emailExists === true && (
+                        <p className="mt-2 text-sm text-amber-500">
+                          An account with this email already exists.{" "}
+                          <button
+                            type="button"
+                            onClick={() => switchMode("signin")}
+                            className="font-medium underline underline-offset-2 transition-colors hover:text-primary"
+                          >
+                            Sign in instead
+                          </button>
+                        </p>
+                      )}
+                      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => toggleRemember(e.target.checked)}
+                            className="size-3.5 accent-primary"
+                          />
+                          Remember me
+                        </label>
+                        {mode === "signin" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStep("forgot");
+                              setError(null);
+                            }}
+                            className="text-xs font-medium text-primary underline-offset-2 transition-colors hover:underline"
+                          >
+                            Forgot password?
+                          </button>
+                        )}
+                      </div>
+
                       <Button
                         type="submit"
-                        variant="outline"
-                        size="icon"
-                        aria-label="Continue"
-                        className="h-11 w-11 rounded-xl"
-                        disabled={isLoading || (mode === "register" && emailExists === true)}
+                        className="press mt-4 w-full rounded-xl btn-glow"
+                        disabled={
+                          isLoading || (mode === "register" && emailExists === true)
+                        }
                       >
                         {isLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : mode === "register" ? (
+                          "Create Account"
                         ) : (
-                          <ArrowRight className="h-4 w-4" />
+                          "Sign In"
                         )}
                       </Button>
-                    </div>
-                    {emailExists === true && (
-                      <p className="mt-2 text-sm text-amber-500">
-                        An account with this email already exists.{" "}
+
+                      <div className="mt-3 text-center">
                         <button
                           type="button"
-                          onClick={() => switchMode("signin")}
-                          className="font-medium underline underline-offset-2 transition-colors hover:text-primary"
+                          onClick={() => setAuthMethod("otp")}
+                          className="text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
                         >
-                          Sign in instead
+                          {mode === "register"
+                            ? "Register with a sign-in code instead"
+                            : "Sign in with a code instead"}
                         </button>
-                      </p>
-                    )}
-                    {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+                      </div>
+                    </CardContent>
+                  </form>
+                ) : step === "signIn" && authMethod === "otp" ? (
+                  <form onSubmit={handleEmailSubmit}>
+                    <CardContent>
+                      {mode === "register" && (
+                        <div className="relative mb-2">
+                          <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            name="name"
+                            placeholder="Full name"
+                            type="text"
+                            autoComplete="name"
+                            className="h-11 rounded-xl pl-9"
+                            disabled={isLoading}
+                            required
+                            minLength={2}
+                            maxLength={60}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <div className="relative flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            name="email"
+                            placeholder="name@example.com"
+                            type="email"
+                            className="h-11 rounded-xl pl-9"
+                            disabled={isLoading}
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="icon"
+                          aria-label="Continue"
+                          className="h-11 w-11 rounded-xl"
+                          disabled={isLoading || (mode === "register" && emailExists === true)}
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ArrowRight className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      {emailExists === true && (
+                        <p className="mt-2 text-sm text-amber-500">
+                          An account with this email already exists.{" "}
+                          <button
+                            type="button"
+                            onClick={() => switchMode("signin")}
+                            className="font-medium underline underline-offset-2 transition-colors hover:text-primary"
+                          >
+                            Sign in instead
+                          </button>
+                        </p>
+                      )}
+                      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
-                    <div className="mt-5">
+                      <div className="mt-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setAuthMethod("password")}
+                          className="text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+                        >
+                          Use email + password instead
+                        </button>
+                      </div>
+                    </CardContent>
+                  </form>
+                ) : (
+                  /* OTP verification step */
+                  <form onSubmit={handleOtpSubmit}>
+                    <CardHeader className="pb-2 text-center">
+                      <CardTitle className="font-display text-xl font-bold tracking-tight">
+                        Check your email
+                      </CardTitle>
+                      <CardDescription>
+                        We've sent a code to{" "}
+                        {step !== "signIn" && step.kind === "otp" ? step.email : email}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <input
+                        type="hidden"
+                        name="email"
+                        value={step !== "signIn" && step.kind === "otp" ? step.email : email}
+                      />
+                      <input
+                        type="hidden"
+                        name="name"
+                        value={
+                          step !== "signIn" && step.kind === "otp" ? step.name ?? "" : ""
+                        }
+                      />
+                      <input type="hidden" name="code" value={otp} />
+
+                      <div className="flex justify-center">
+                        <InputOTP
+                          value={otp}
+                          onChange={setOtp}
+                          maxLength={6}
+                          disabled={isLoading}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && otp.length === 6 && !isLoading) {
+                              const form = (e.target as HTMLElement).closest("form");
+                              if (form) form.requestSubmit();
+                            }
+                          }}
+                        >
+                          <InputOTPGroup>
+                            {Array.from({ length: 6 }).map((_, index) => (
+                              <InputOTPSlot key={index} index={index} />
+                            ))}
+                          </InputOTPGroup>
+                        </InputOTP>
+                      </div>
+                      {error && (
+                        <p className="mt-2 text-center text-sm text-destructive">{error}</p>
+                      )}
+                      <p className="mt-4 text-center text-sm text-muted-foreground">
+                        Didn't receive a code?{" "}
+                        <Button
+                          variant="link"
+                          className="h-auto p-0"
+                          onClick={() => setStep("signIn")}
+                        >
+                          Try again
+                        </Button>
+                      </p>
+                    </CardContent>
+                    <CardFooter className="flex-col gap-2">
+                      <Button
+                        type="submit"
+                        className="press w-full rounded-xl btn-glow"
+                        disabled={isLoading || otp.length !== 6}
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            Verify code
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setStep("signIn")}
+                        disabled={isLoading}
+                        className="w-full"
+                      >
+                        Use different email
+                      </Button>
+                    </CardFooter>
+                  </form>
+                )}
+
+                {showDivider && (
+                  <>
+                    <div className="px-6">
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center">
                           <span className="w-full border-t border-border/60" />
@@ -328,122 +978,42 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           </span>
                         </div>
                       </div>
-
-                      <div className="mt-4 grid gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 w-full rounded-xl"
-                          onClick={() => void handleGoogleLogin()}
-                          disabled={isLoading}
-                        >
-                          <GoogleIcon className="mr-2 h-4 w-4" />
-                          Continue with Google
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 w-full rounded-xl"
-                          onClick={() => void handleGitHubLogin()}
-                          disabled={isLoading}
-                        >
-                          <Github className="mr-2 h-4 w-4" />
-                          Continue with GitHub
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="h-11 w-full rounded-xl"
-                          onClick={() => void handleGuestLogin()}
-                          disabled={isLoading}
-                        >
-                          <UserX className="mr-2 h-4 w-4" />
-                          Continue as Guest
-                        </Button>
-                      </div>
                     </div>
-                  </CardContent>
-                </form>
-              </>
-            ) : (
-              <>
-                <CardHeader className="text-center">
-                  <CardTitle className="font-display text-xl font-bold tracking-tight">
-                    Check your email
-                  </CardTitle>
-                  <CardDescription>
-                    We've sent a code to {step.email}
-                  </CardDescription>
-                </CardHeader>
-                <form onSubmit={handleOtpSubmit}>
-                  <CardContent>
-                    <input type="hidden" name="email" value={step.email} />
-                    <input type="hidden" name="name" value={step.name ?? ""} />
-                    <input type="hidden" name="code" value={otp} />
 
-                    <div className="flex justify-center">
-                      <InputOTP
-                        value={otp}
-                        onChange={setOtp}
-                        maxLength={6}
-                        disabled={isLoading}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && otp.length === 6 && !isLoading) {
-                            const form = (e.target as HTMLElement).closest("form");
-                            if (form) form.requestSubmit();
-                          }
-                        }}
-                      >
-                        <InputOTPGroup>
-                          {Array.from({ length: 6 }).map((_, index) => (
-                            <InputOTPSlot key={index} index={index} />
-                          ))}
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
-                    {error && (
-                      <p className="mt-2 text-center text-sm text-destructive">{error}</p>
-                    )}
-                    <p className="mt-4 text-center text-sm text-muted-foreground">
-                      Didn't receive a code?{" "}
+                    <div className="mt-4 grid gap-2 px-6 pb-6">
                       <Button
-                        variant="link"
-                        className="h-auto p-0"
-                        onClick={() => setStep("signIn")}
+                        type="button"
+                        variant="outline"
+                        className="h-11 w-full rounded-xl"
+                        onClick={() => void handleGoogleLogin()}
+                        disabled={isLoading}
                       >
-                        Try again
+                        <GoogleIcon className="mr-2 h-4 w-4" />
+                        Continue with Google
                       </Button>
-                    </p>
-                  </CardContent>
-                  <CardFooter className="flex-col gap-2">
-                    <Button
-                      type="submit"
-                      className="press w-full rounded-xl btn-glow"
-                      disabled={isLoading || otp.length !== 6}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Verifying...
-                        </>
-                      ) : (
-                        <>
-                          Verify code
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setStep("signIn")}
-                      disabled={isLoading}
-                      className="w-full"
-                    >
-                      Use different email
-                    </Button>
-                  </CardFooter>
-                </form>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 w-full rounded-xl"
+                        onClick={() => void handleGitHubLogin()}
+                        disabled={isLoading}
+                      >
+                        <Github className="mr-2 h-4 w-4" />
+                        Continue with GitHub
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-11 w-full rounded-xl"
+                        onClick={() => void handleGuestLogin()}
+                        disabled={isLoading}
+                      >
+                        <UserX className="mr-2 h-4 w-4" />
+                        Continue as Guest
+                      </Button>
+                    </div>
+                  </>
+                )}
               </>
             )}
 

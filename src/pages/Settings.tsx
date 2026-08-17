@@ -20,10 +20,12 @@ import {
   Github,
   Globe,
   GitPullRequestArrow,
+  KeyRound,
   Loader2,
   Moon,
   RefreshCw,
   Palette,
+  ShieldCheck,
   Sun,
   User,
   Video,
@@ -202,6 +204,9 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* ---------------- Security ---------------- */}
+          <SecuritySection />
+
           {/* ---------------- Appearance ---------------- */}
           <section className="glass rounded-2xl p-6 sm:p-7">
             <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
@@ -339,6 +344,148 @@ export default function SettingsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+function SecuritySection() {
+  const { user } = useAuth();
+  const changePassword = useAction(api.auth.changePassword.changePassword);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changing, setChanging] = useState(false);
+  const [changed, setChanged] = useState(false);
+
+  const canChange =
+    !user?.isAnonymous &&
+    currentPassword.length > 0 &&
+    newPassword.length >= 8 &&
+    newPassword === confirmPassword;
+
+  const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords don't match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters.");
+      return;
+    }
+    setChanging(true);
+    setChanged(false);
+    try {
+      await changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setChanged(true);
+      toast.success(
+        "Password changed. You've been signed out of other devices.",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't change the password.",
+      );
+    } finally {
+      setChanging(false);
+    }
+  };
+
+  return (
+    <section className="glass rounded-2xl p-6 sm:p-7">
+      <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+        <ShieldCheck className="size-4 text-primary" /> Security
+      </h2>
+
+      {user?.isAnonymous ? (
+        <div className="mt-4 rounded-xl border border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
+          You're signed in as a guest, which has no password. Sign in with an
+          email to set up password security.
+        </div>
+      ) : (
+        <form onSubmit={(e) => void handleChangePassword(e)} className="mt-5">
+          <p className="text-xs text-muted-foreground">
+            Changing your password signs you out of every other device. Your
+            current session stays signed in.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <div>
+              <label
+                htmlFor="current-password"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Current password
+              </label>
+              <Input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="new-password"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                New password
+              </label>
+              <Input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="confirm-password"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Confirm new password
+              </label>
+              <Input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repeat it"
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-3">
+            {changed && (
+              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                Password updated ✓
+              </p>
+            )}
+            <Button
+              type="submit"
+              size="sm"
+              className="rounded-full"
+              disabled={!canChange || changing}
+            >
+              {changing ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <KeyRound className="mr-1.5 size-3.5" />
+              )}
+              {changing ? "Changing…" : "Change password"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 
