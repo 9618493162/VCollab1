@@ -57,24 +57,52 @@ async function canModerate(
   return false;
 }
 
-/** Join a meeting: register presence and broadcast a hello so peers connect. */
+/**
+ * Join a meeting: register presence and broadcast a hello so peers connect.
+ * This is the backend's single authoritative join gate — every join attempt
+ * (fresh, reconnect, direct API call) is validated here BEFORE any video
+ * token or mesh connection is established. Ended / cancelled / expired
+ * meetings and expired links are rejected unconditionally.
+ */
 export const joinRoom = mutation({
   args: {
     code: v.string(),
     clientId: v.string(),
     name: v.string(),
     userId: v.optional(v.id("users")),
+    token: v.optional(v.string()),
   },
-  handler: async (ctx, { code, clientId, name, userId }) => {
+  handler: async (ctx, { code, clientId, name, userId, token }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
     const room = await ctx.db
       .query("rooms")
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
-    if (room === null) throw new Error("This meeting doesn't exist yet.");
-    if (room.locked === true) throw new Error("This meeting is locked by the host.");
+    if (room === null)
+      throw new Error("This meeting code isn't valid or the meeting was never created.");
+
+    // A link carrying the ?t= credential must match the room's live token.
+    // The token is revoked on end/expiry, so old saved links die instantly.
+    if (token !== undefined && room.joinToken !== token)
+      throw new Error("This meeting link is no longer valid.");
+
+    // Lazy expiry: a room past its expiresAt is rejected right here, even if
+    // the background sweep hasn't run yet. (Mutations roll back on throw, so
+    // the persistent status flip is done by the sweep; getRoom computes the
+    // `expired` flag from expiresAt so the UI shows the right screen.)
+    const terminal = room.status === "ended" || room.status === "cancelled" || room.status === "expired";
+    if (
+      !terminal &&
+      room.expiresAt !== undefined &&
+      room.expiresAt < Date.now()
+    ) {
+      throw new Error("This meeting has expired.");
+    }
     if (room.status === "ended") throw new Error("This meeting has ended.");
+    if (room.status === "cancelled") throw new Error("This meeting was cancelled.");
+    if (room.status === "expired") throw new Error("This meeting has expired.");
+    if (room.locked === true) throw new Error("This meeting is locked by the host.");
 
     // waiting room: hold everyone except the host until they're admitted
     const settings = await getMeetingSettings(ctx, normalized);

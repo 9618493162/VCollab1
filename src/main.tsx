@@ -242,8 +242,11 @@ createRoot(document.getElementById("root")!).render(
               />
               {/* Public on purpose: anyone with a link can join a call — no
                   account needed on their side. Starting meetings stays gated
-                  behind /dashboard's RequireAuth. */}
+                  behind /dashboard's RequireAuth. `/join/:code` is the
+                  shareable link form (both routes resolve through the backend
+                  before any access is granted). */}
               <Route path="/call/:code" element={<Call />} />
+              <Route path="/join/:code" element={<Call />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CommandPalette />

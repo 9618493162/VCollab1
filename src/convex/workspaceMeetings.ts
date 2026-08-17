@@ -3,8 +3,15 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, MutationCtx, QueryCtx, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { generateRoomCode } from "./rooms";
-import { occurrenceTimes } from "./meetings";
+import {
+  generateJoinToken,
+  generateRoomCode,
+  scheduleExpirySweep,
+} from "./rooms";
+import {
+  occurrenceTimes,
+  SCHEDULED_MEETING_GRACE_MS,
+} from "./meetings";
 
 const recurrenceValidator = v.optional(
   v.object({
@@ -92,14 +99,18 @@ export const scheduleWorkspaceMeeting = mutation({
       }
       if (code === "") throw new Error("Couldn't generate a code, try again.");
 
+      const expiresAt = occTime + duration * 60_000 + SCHEDULED_MEETING_GRACE_MS;
       await ctx.db.insert("rooms", {
         code,
         createdBy: userId,
         createdAt: Date.now(),
         title: cleanTitle,
         status: "scheduled",
+        expiresAt,
+        joinToken: generateJoinToken(),
         locked: false,
       });
+      await scheduleExpirySweep(ctx, expiresAt);
 
       await ctx.db.insert("scheduledMeetings", {
         code,

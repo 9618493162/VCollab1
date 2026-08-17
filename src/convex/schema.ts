@@ -33,7 +33,10 @@ const schema = defineSchema(
       onboardedAt: v.optional(v.number()), // first-run wizard completion time (Phase 57)
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // a video meeting room, keyed by a human-shareable code
+    // a video meeting room, keyed by a human-shareable code.
+    // The backend owns the lifecycle: a room is joinable only while its
+    // status is scheduled or active and now < expiresAt. ended/cancelled/
+    // expired rooms reject every join attempt and never mint video tokens.
     rooms: defineTable({
       code: v.string(), // e.g. "abc-defg-hij"
       createdBy: v.id("users"),
@@ -44,10 +47,20 @@ const schema = defineSchema(
           v.literal("scheduled"),
           v.literal("active"),
           v.literal("ended"),
+          v.literal("cancelled"),
+          v.literal("expired"),
         ),
       ),
       startedAt: v.optional(v.number()),
       endedAt: v.optional(v.number()),
+      // hard deadline for joinability (epoch ms). Past this the meeting is
+      // treated as expired by the backend even if status was never flipped.
+      expiresAt: v.optional(v.number()),
+      // secure per-meeting credential embedded in shared links (?t=...).
+      // Invalidated (removed) the moment the meeting ends/expires.
+      joinToken: v.optional(v.string()),
+      // peak participant snapshot captured when the meeting ends (history)
+      participantCount: v.optional(v.number()),
       locked: v.optional(v.boolean()),
       // live recording state, broadcast to everyone in the call so nobody
       // records secretly. Only the host/co-host that started it may pause/
@@ -153,6 +166,7 @@ const schema = defineSchema(
         v.literal("active"),
         v.literal("ended"),
         v.literal("cancelled"),
+        v.literal("expired"),
       ),
       // recurrence for repeating meetings (Phase 47). Occurrences are
       // materialized as sibling scheduledMeetings rows sharing a seriesId.

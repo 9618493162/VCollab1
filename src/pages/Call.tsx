@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { useCallRoom, type PeerQuality } from "@/hooks/use-call-room";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ import {
   PhoneOff,
   PictureInPicture2,
   Play,
+  Plus,
   Radio,
   RefreshCw,
   Send,
@@ -84,7 +86,7 @@ import { AgendaPanel } from "@/components/AgendaPanel";
 import { BreakoutsPanel } from "@/components/BreakoutsPanel";
 import { WhiteboardOverlay } from "@/components/WhiteboardOverlay";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -160,10 +162,89 @@ function QualityDot({ quality }: { quality?: PeerQuality }) {
   );
 }
 
+/**
+ * Dedicated post-lifecycle screen. Shown for ended / expired / cancelled /
+ * missing meetings — never renders the video lobby, never requests a token.
+ */
+function MeetingOverScreen({
+  status,
+  code,
+  isAuthenticated,
+  onCreateNew,
+  onBack,
+}: {
+  status: "ended" | "expired" | "cancelled" | "notfound";
+  code: string;
+  isAuthenticated: boolean;
+  onCreateNew?: () => void;
+  onBack: () => void;
+}) {
+  const copy = {
+    ended: {
+      icon: PhoneOff,
+      title: "Meeting Ended",
+      body: "This meeting has ended and the meeting link is no longer active.",
+    },
+    expired: {
+      icon: Ban,
+      title: "Meeting Not Available",
+      body: "This meeting code has expired.",
+    },
+    cancelled: {
+      icon: Ban,
+      title: "Meeting Not Available",
+      body: "This meeting was cancelled.",
+    },
+    notfound: {
+      icon: Ban,
+      title: "Meeting Not Available",
+      body: "This meeting code isn't valid or the meeting was never created.",
+    },
+  }[status];
+  const Icon = copy.icon;
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background px-6">
+      <div className="w-full max-w-md text-center">
+        <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/50">
+          <Icon className="size-7 text-muted-foreground" />
+        </div>
+        <h1 className="mt-6 font-display text-2xl font-bold tracking-tight">
+          {copy.title}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">{copy.body}</p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground/60">{code}</p>
+        <div className="mt-8 flex flex-col items-center justify-center gap-2 sm:flex-row">
+          {status === "ended" && (
+            <Button
+              onClick={onCreateNew}
+              className="h-11 rounded-full px-7 btn-glow"
+            >
+              <Plus className="mr-2 size-4" /> Create New Meeting
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            className="h-11 rounded-full border-border px-7 text-foreground hover:bg-muted"
+            onClick={onBack}
+          >
+            {status === "ended"
+              ? "Back to VCollab"
+              : isAuthenticated
+                ? "Back to dashboard"
+                : "Back"}
+          </Button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export default function Call() {
   const { code: rawCode } = useParams();
   const code = extractCode(rawCode ?? "");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("t") ?? undefined;
   const { user, signOut, isAuthenticated } = useAuth();
   const isHost = useQuery(api.meetings.isHost, code ? { code } : "skip");
   const room = useQuery(api.rooms.getRoom, code ? { code } : "skip");
@@ -189,6 +270,8 @@ export default function Call() {
   const [showInfo, setShowInfo] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [meetingEnded, setMeetingEnded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [copied, setCopied] = useState(false);
@@ -202,14 +285,21 @@ export default function Call() {
   const reduceMotion = useReducedMotion();
   const burstId = useRef(0);
 
-  const call = useCallRoom(code, displayName, {
-    getVideoTiles: () =>
-      Array.from(document.querySelectorAll<HTMLVideoElement>("video[data-peer]")).map(
-        (el) => ({ id: el.dataset.peer ?? "", el }),
-      ),
-  });
+  const call = useCallRoom(
+    code,
+    displayName,
+    {
+      getVideoTiles: () =>
+        Array.from(document.querySelectorAll<HTMLVideoElement>("video[data-peer]")).map(
+          (el) => ({ id: el.dataset.peer ?? "", el }),
+        ),
+    },
+    token,
+  );
   const lockMeeting = useMutation(api.meetings.lockMeeting);
   const endMeeting = useMutation(api.meetings.endMeeting);
+  const createRoom = useMutation(api.rooms.createRoom);
+  const transferHost = useMutation(api.meetings.transferHost);
 
   const meetingSettings = useQuery(api.security.getMeetingSettings, code ? { code } : "skip");
   const waitingList = useQuery(api.security.listWaitingParticipants, code ? { code } : "skip");
@@ -264,13 +354,33 @@ export default function Call() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call.kicked]);
 
+  // Ended by host (realtime signal): stop the call and show the ended screen.
   useEffect(() => {
     if (call.endedByHost) {
       toast.info("The host ended the meeting.");
-      navigate(isAuthenticated ? "/dashboard" : "/", { replace: true });
+      setMeetingEnded(true);
+      void call.leave();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call.endedByHost]);
+
+  // The backend is the source of truth: whenever the room's stored status
+  // flips to a terminal state (host ended it, another tab ended it, or it
+  // expired/cancelled), every open tab of this meeting shows the ended
+  // screen — no reliance on the page refreshing or on client state alone.
+  useEffect(() => {
+    if (!room) return;
+    if (
+      room.status === "ended" ||
+      room.status === "expired" ||
+      room.status === "cancelled" ||
+      room.expired === true
+    ) {
+      setMeetingEnded(true);
+      if (call.joined) void call.leave();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.status, room?.expired, call.joined]);
 
   useEffect(() => {
     if (call.recordingError) {
@@ -337,7 +447,9 @@ export default function Call() {
   };
 
   const handleCopy = async () => {
-    const url = `${window.location.origin}/call/${code}`;
+    // Share link carries the secure join token (?t=...). The backend revokes
+    // it the moment the meeting ends, so saved links die with the meeting.
+    const url = `${window.location.origin}/join/${code}${room?.joinToken ? `?t=${room.joinToken}` : ""}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -348,12 +460,31 @@ export default function Call() {
   };
 
   const handleEndForAll = async () => {
+    setConfirmEnd(false);
     try {
       await endMeeting({ code });
+      setMeetingEnded(true);
       await call.leave();
-      navigate("/dashboard");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't end the meeting.");
+    }
+  };
+
+  const handleCreateNew = async () => {
+    try {
+      const next = await createRoom();
+      navigate(`/call/${next}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't start a meeting.");
+    }
+  };
+
+  const handleTransferHost = async (targetUserId: Id<"users">) => {
+    try {
+      await transferHost({ code, targetUserId });
+      toast.success("Hosting transferred.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't transfer hosting.");
     }
   };
 
@@ -488,6 +619,72 @@ export default function Call() {
           </Button>
         </div>
       </main>
+    );
+  }
+
+  const goHome = () => navigate(isAuthenticated ? "/dashboard" : "/");
+
+  // ---- terminal lifecycle states: backend status wins over any UI state ----
+  if (room !== undefined && room !== null && room.expired === true) {
+    return (
+      <MeetingOverScreen
+        status="expired"
+        code={code}
+        isAuthenticated={isAuthenticated}
+        onBack={goHome}
+      />
+    );
+  }
+  if (room !== undefined && room !== null && room.status === "ended") {
+    return (
+      <MeetingOverScreen
+        status="ended"
+        code={code}
+        isAuthenticated={isAuthenticated}
+        onCreateNew={() => void handleCreateNew()}
+        onBack={goHome}
+      />
+    );
+  }
+  if (room !== undefined && room !== null && room.status === "expired") {
+    return (
+      <MeetingOverScreen
+        status="expired"
+        code={code}
+        isAuthenticated={isAuthenticated}
+        onBack={goHome}
+      />
+    );
+  }
+  if (room !== undefined && room !== null && room.status === "cancelled") {
+    return (
+      <MeetingOverScreen
+        status="cancelled"
+        code={code}
+        isAuthenticated={isAuthenticated}
+        onBack={goHome}
+      />
+    );
+  }
+  if (meetingEnded) {
+    return (
+      <MeetingOverScreen
+        status="ended"
+        code={code}
+        isAuthenticated={isAuthenticated}
+        onCreateNew={() => void handleCreateNew()}
+        onBack={goHome}
+      />
+    );
+  }
+  if (room !== undefined && room === null) {
+    return (
+      <MeetingOverScreen
+        status="notfound"
+        code={code}
+        isAuthenticated={isAuthenticated}
+        onBack={goHome}
+      />
     );
   }
 
@@ -1211,7 +1408,7 @@ export default function Call() {
                   {room?.locked ? <Lock className="size-5" /> : <LockOpen className="size-5" />}
                 </ControlButton>
                 <Button
-                  onClick={() => void handleEndForAll()}
+                  onClick={() => setConfirmEnd(true)}
                   className="ml-1 h-11 w-11 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-12 sm:w-12"
                   aria-label="End meeting for everyone"
                   title="End for everyone"
@@ -1232,6 +1429,30 @@ export default function Call() {
             )}
           </div>
           </footer>
+
+          {/* ---------- confirm before ending the meeting for everyone ---------- */}
+          <AlertDialog open={confirmEnd} onOpenChange={setConfirmEnd}>
+            <AlertDialogContent className="border-border/60">
+              <AlertDialogHeader>
+                <AlertDialogTitle>End meeting for everyone?</AlertDialogTitle>
+                <AlertDialogDescription className="text-muted-foreground">
+                  All participants will be disconnected and the meeting
+                  link/code will become invalid.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-border/60">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-500 text-white hover:bg-red-600"
+                  onClick={() => void handleEndForAll()}
+                >
+                  End Meeting
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* ---------- confirm before stopping a recording ---------- */}
           <AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
@@ -1281,6 +1502,7 @@ export default function Call() {
                       toast.error(error instanceof Error ? error.message : "Couldn't update co-host."),
                     )
                   }
+                  onTransferHost={(userId) => void handleTransferHost(userId)}
                   onMuteAll={() => void handleMuteAll()}
                   onClose={() => setPanel("none")}
                 />
@@ -1364,6 +1586,7 @@ export default function Call() {
         startedAt={call.joinedAt ?? undefined}
         participantCount={participantCount}
         durationLabel={elapsed}
+        joinToken={room?.joinToken}
       />
       {showSecurity && (
         <SecurityPanel
@@ -1771,6 +1994,7 @@ function PeoplePanel({
   onAdmitAll,
   onReject,
   onMakeCoHost,
+  onTransferHost,
   onMuteAll,
   onClose,
 }: {
@@ -1784,6 +2008,7 @@ function PeoplePanel({
   onAdmitAll: () => void;
   onReject: (clientId: string) => void;
   onMakeCoHost: (clientId: string) => void;
+  onTransferHost: (userId: Id<"users">) => void;
   onMuteAll: () => void;
   onClose: () => void;
 }) {
@@ -1982,6 +2207,17 @@ function PeoplePanel({
                     className="flex size-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-300"
                   >
                     <UserPlus className="size-3.5" />
+                  </button>
+                )}
+                {isHost && !self && p.userId && (
+                  <button
+                    type="button"
+                    onClick={() => onTransferHost(p.userId!)}
+                    title="Transfer host"
+                    aria-label="Transfer host"
+                    className="flex size-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-amber-500/20 hover:text-amber-600 dark:hover:text-amber-300"
+                  >
+                    <Crown className="size-3.5" />
                   </button>
                 )}
                 {isModerator && !self && (

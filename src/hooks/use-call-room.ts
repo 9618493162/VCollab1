@@ -136,6 +136,7 @@ export function useCallRoom(
   code: string,
   name: string,
   opts?: { getVideoTiles?: () => { id: string; el: HTMLVideoElement | null }[] },
+  token?: string,
 ) {
   const [clientId] = useState(() =>
     typeof crypto.randomUUID === "function"
@@ -812,7 +813,7 @@ export function useCallRoom(
   const join = useCallback(async () => {
     if (joinedRef.current) return;
     try {
-      const res = await joinRoom({ code, clientId, name, userId });
+      const res = await joinRoom({ code, clientId, name, userId, token });
       joinedRef.current = true;
       setJoined(true);
       setJoinedAt(Date.now());
@@ -846,10 +847,16 @@ export function useCallRoom(
       const raw = error instanceof Error ? error.message : "";
       const lower = raw.toLowerCase();
       let message = "Couldn't join the meeting.";
-      if (/doesn't look right|not found|doesn't exist/i.test(raw)) {
-        message = "This meeting doesn't exist. Check the code and try again.";
+      if (/doesn't look right|not found|doesn't exist|isn't valid/i.test(raw)) {
+        message = "This meeting code isn't valid or the meeting was never created.";
+      } else if (/expired/i.test(raw)) {
+        message = "This meeting has expired.";
+      } else if (/link is no longer valid/i.test(raw)) {
+        message = "This meeting link is no longer valid.";
       } else if (/locked/i.test(raw)) {
         message = "This meeting is locked by the host.";
+      } else if (/cancelled/i.test(raw)) {
+        message = "This meeting was cancelled.";
       } else if (/ended/i.test(raw)) {
         message = "This meeting has ended.";
       } else if (
@@ -863,7 +870,7 @@ export function useCallRoom(
       }
       setJoinError(message);
     }
-  }, [clientId, code, ensurePeer, joinRoom, name, sendSignal, userId]);
+  }, [clientId, code, ensurePeer, joinRoom, name, sendSignal, userId, token]);
 
   const toggleMic = useCallback(() => {
     const next = !micOn;

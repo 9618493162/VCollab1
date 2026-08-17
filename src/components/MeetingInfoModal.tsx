@@ -57,6 +57,7 @@ export function MeetingInfoModal({
   startedAt,
   participantCount,
   durationLabel,
+  joinToken,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -66,8 +67,15 @@ export function MeetingInfoModal({
   startedAt?: number;
   participantCount: number;
   durationLabel: string;
+  joinToken?: string;
 }) {
-  const link = typeof window !== "undefined" ? `${window.location.origin}/call/${code}` : "";
+  // Share link resolves through the backend (the /join route validates the
+  // code + token before anything is granted) and carries the secure join
+  // token, which the backend revokes the moment the meeting ends.
+  const link =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/join/${code}${joinToken ? `?t=${joinToken}` : ""}`
+      : "";
   const startLabel = startedAt
     ? new Date(startedAt).toLocaleString([], {
         month: "short",

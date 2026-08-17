@@ -5,13 +5,48 @@ import { insertUser, makeTestClient } from "./convex-test-client";
 describe("livekit cloud recording", () => {
   it("getParticipantToken fails with a clear hint when LiveKit isn't configured", async () => {
     const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const host = t.withIdentity({ subject: hostId });
+    const code = await host.mutation(api.rooms.createRoom, {});
+    // Be in the meeting so the participant check passes; the status gate
+    // runs first and only then do we hit the missing LiveKit config.
+    await t.mutation(api.call.joinRoom, {
+      code,
+      clientId: "c1",
+      name: "Guest",
+    });
     await expect(
       t.action(api.livekit.getParticipantToken, {
-        code: "abc-defg-hij",
+        code,
         clientId: "c1",
         name: "Guest",
       }),
     ).rejects.toThrow("LiveKit isn't configured");
+  });
+
+  it("never mints a token for a meeting that has ended", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const host = t.withIdentity({ subject: hostId });
+    const guestId = await insertUser(t, "guest@example.com", "Guest");
+    const guest = t.withIdentity({ subject: guestId });
+    const code = await host.mutation(api.rooms.createRoom, {});
+    await t.mutation(api.call.joinRoom, {
+      code,
+      clientId: "c-guest",
+      name: "Guest",
+      userId: guestId,
+    });
+    await host.mutation(api.meetings.endMeeting, { code });
+
+    // Ended meeting: even a member who is (stale-)present is refused a token.
+    await expect(
+      guest.action(api.livekit.getParticipantToken, {
+        code,
+        clientId: "c-guest",
+        name: "Guest",
+      }),
+    ).rejects.toThrow("This meeting is no longer active");
   });
 
   it("startRoomRecording requires host/co-host permissions before touching LiveKit", async () => {

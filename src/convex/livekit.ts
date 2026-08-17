@@ -64,6 +64,26 @@ async function canModerate(
   return mine !== undefined && settings.coHosts.includes(mine.clientId);
 }
 
+/**
+ * Reject when the meeting is not live. Critical security gate: LiveKit
+ * tokens are only ever minted for meetings the backend says are joinable
+ * (status scheduled/active and not past expiresAt).
+ */
+async function assertMeetingLive(ctx: ActionCtx, code: string): Promise<void> {
+  const room = await ctx.runQuery(api.rooms.getRoom, { code });
+  if (!room) throw new Error("This meeting doesn't exist.");
+  const terminal =
+    room.status === "ended" ||
+    room.status === "cancelled" ||
+    room.status === "expired";
+  if (terminal || room.expired === true) {
+    throw new Error("This meeting is no longer active.");
+  }
+  if (room.status !== "active" && room.status !== "scheduled") {
+    throw new Error("This meeting is no longer active.");
+  }
+}
+
 /** Mint a short-lived token that lets this client publish to the recording room. */
 export const getParticipantToken = action({
   args: {
@@ -74,6 +94,8 @@ export const getParticipantToken = action({
   handler: async (ctx, { code, clientId, name }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
+    // Never mint a LiveKit token for a meeting the backend says is over.
+    await assertMeetingLive(ctx, normalized);
     const { url, key, secret } = liveKitClients();
     // Only people actually in the meeting may join the recording room.
     const participants = await ctx.runQuery(api.call.listParticipants, {
@@ -113,6 +135,7 @@ export const startRoomRecording = action({
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
     const userId = identity.subject as Id<"users">;
+    await assertMeetingLive(ctx, normalized);
     if (!(await canModerate(ctx, normalized, userId)))
       throw new Error("Only the host or a co-host can start a cloud recording.");
     const live = await ctx.runQuery(api.recording.getRecordingState, {

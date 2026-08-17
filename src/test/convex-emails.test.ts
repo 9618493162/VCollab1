@@ -15,7 +15,7 @@ describe("buildMeetingEmail", () => {
     expect(email.subject).toContain("You're invited");
     expect(email.subject).toContain("Sprint planning");
     expect(email.text).toContain("abc-defg-hij");
-    expect(email.text).toContain("/call/abc-defg-hij");
+    expect(email.text).toContain("/join/abc-defg-hij");
     expect(email.text).toContain("Review roadmap priorities");
     expect(email.html).toContain("Join meeting");
     expect(email.html).toContain("abc-defg-hij");

@@ -9,7 +9,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { generateRoomCode, normalizeCode } from "./rooms";
+import { generateJoinToken, generateRoomCode, normalizeCode, scheduleExpirySweep } from "./rooms";
 import { createNotification } from "./notifications";
 
 async function getRoomByCode(ctx: QueryCtx, code: string) {
@@ -20,6 +20,17 @@ async function getRoomByCode(ctx: QueryCtx, code: string) {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Meeting expiration policy (ms). Instant rooms live 24h from creation; a
+// scheduled meeting stays joinable until 24h after its scheduled end time.
+// These are hard caps — ending always invalidates immediately regardless.
+export const INSTANT_MEETING_TTL_MS = 24 * 60 * 60_000;
+export const SCHEDULED_MEETING_GRACE_MS = 24 * 60 * 60_000;
+
+/** Whether a room status is a terminal (non-joinable) state. */
+export function isTerminalStatus(status?: string): boolean {
+  return status === "ended" || status === "cancelled" || status === "expired";
+}
 
 /** Clean, dedupe, and cap an invitee email list. */
 export function normalizeEmails(raw: string[]): string[] {
@@ -209,14 +220,18 @@ export const scheduleMeeting = mutation({
       }
       if (code === "") throw new Error("Couldn't generate a code, try again.");
 
+      const expiresAt = occTime + duration * 60_000 + SCHEDULED_MEETING_GRACE_MS;
       await ctx.db.insert("rooms", {
         code,
         createdBy: userId,
         createdAt: Date.now(),
         title: cleanTitle,
         status: "scheduled",
+        expiresAt,
+        joinToken: generateJoinToken(),
         locked: false,
       });
+      await scheduleExpirySweep(ctx, expiresAt);
 
       await ctx.db.insert("scheduledMeetings", {
         code,
@@ -769,10 +784,30 @@ export const endMeeting = mutation({
       throw new Error("Only the host can end the meeting.");
 
     const now = Date.now();
+    const cutoff = now - 45_000; // only count live presence rows
+    const present = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .collect();
+    const live = present.filter(
+      (p) => p.lastSeen >= cutoff && p.waiting !== true,
+    );
+
+    // End the meeting for everyone, for good:
+    //  - status flips to ended (authoritative)
+    //  - expiresAt moves to now so even a stray join is rejected
+    //  - the join token is revoked, so saved ?t= links die instantly
+    //  - presence rows are cleared so nobody lingers and the LiveKit
+    //    recording room empties (cloud egress finalizes on its own)
     await ctx.db.patch(room._id, {
       status: "ended",
       endedAt: now,
+      expiresAt: now,
+      joinToken: undefined,
+      participantCount: Math.max(live.length, 1),
     });
+    for (const p of present) await ctx.db.delete(p._id);
+
     const scheduled = await ctx.db
       .query("scheduledMeetings")
       .withIndex("by_code", (q) => q.eq("code", normalized))
@@ -790,6 +825,107 @@ export const endMeeting = mutation({
       payload: JSON.stringify({ endedBy: userId }),
       createdAt: now,
     });
+  },
+});
+
+/**
+ * Transfer hosting to another signed-in participant (host only). The new host
+ * becomes the only account that can end the meeting; the previous host drops
+ * to a normal participant unless they're also a co-host.
+ */
+export const transferHost = mutation({
+  args: { code: v.string(), targetUserId: v.id("users") },
+  handler: async (ctx, { code, targetUserId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to transfer hosting");
+    const normalized = normalizeCode(code);
+    const room = await getRoomByCode(ctx, normalized);
+    if (room === null) throw new Error("Meeting not found.");
+    if (room.createdBy !== userId)
+      throw new Error("Only the host can transfer ownership.");
+    if (isTerminalStatus(room.status))
+      throw new Error("This meeting is no longer active.");
+    if (targetUserId === userId) throw new Error("You're already the host.");
+
+    const present = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .collect();
+    if (!present.some((p) => p.userId === targetUserId))
+      throw new Error("That person isn't in the meeting.");
+
+    await ctx.db.patch(room._id, { createdBy: targetUserId });
+    await ctx.db.insert("signals", {
+      code: normalized,
+      from: userId,
+      to: "*",
+      kind: "host",
+      payload: JSON.stringify({ hostId: targetUserId }),
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Background sweep that flips abandoned meetings to `expired`. Runs on a
+ * self-scheduling loop: after cleaning up, it re-arms itself to the next
+ * soonest expiry (capped at 7 days), or stops when nothing is pending.
+ */
+export const expireStaleMeetings = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const rooms = await ctx.db
+      .query("rooms")
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("status"), "scheduled"),
+          q.eq(q.field("status"), "active"),
+        ),
+      )
+      .take(500);
+
+    let expired = 0;
+    let next = Number.POSITIVE_INFINITY;
+    for (const room of rooms) {
+      if (room.expiresAt === undefined) continue;
+      if (room.expiresAt <= now) {
+        await ctx.db.patch(room._id, {
+          status: "expired",
+          endedAt: now,
+          expiresAt: now,
+          joinToken: undefined,
+        });
+        const scheduled = await ctx.db
+          .query("scheduledMeetings")
+          .withIndex("by_code", (q) => q.eq("code", room.code))
+          .first();
+        if (scheduled && !isTerminalStatus(scheduled.status)) {
+          await ctx.db.patch(scheduled._id, { status: "expired" });
+        }
+        const present = await ctx.db
+          .query("presence")
+          .withIndex("by_code", (q) => q.eq("code", room.code))
+          .collect();
+        for (const p of present) await ctx.db.delete(p._id);
+        expired++;
+      } else if (room.expiresAt < next) {
+        next = room.expiresAt;
+      }
+    }
+
+    // Re-arm the sweep for the next room that can expire (or stop entirely
+    // when nothing is left — new meetings re-arm it when they're created).
+    if (expired > 0 || next !== Number.POSITIVE_INFINITY) {
+      if (next === Number.POSITIVE_INFINITY) next = now + 6 * 60 * 60_000;
+      const delay = Math.min(Math.max(next - Date.now() + 60_000, 60_000), 7 * 24 * 60 * 60_000);
+      try {
+        await ctx.scheduler.runAfter(delay, internal.meetings.expireStaleMeetings, {});
+      } catch {
+        // sweep is best-effort; joinRoom enforces expiry inline too
+      }
+    }
+    return expired;
   },
 });
 

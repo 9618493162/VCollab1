@@ -33,7 +33,7 @@ export function buildMeetingEmail(
     hour: "numeric",
     minute: "2-digit",
   });
-  const link = `${APP_URL}/call/${m.code}`;
+  const link = `${APP_URL}/join/${m.code}`;
   const endsAt = new Date(
     m.startTime + m.durationMinutes * 60_000,
   ).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });

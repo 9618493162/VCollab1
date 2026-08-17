@@ -1,9 +1,34 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { INSTANT_MEETING_TTL_MS } from "./meetings";
 
 const CHARS = "abcdefghjkmnpqrstuvwxyz"; // no confusing letters (no i, l, o)
 const CODE_LENGTH = 10;
+
+/** Secure per-meeting credential for shareable links (?t=...). */
+export function generateJoinToken(): string {
+  const bytes =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().replace(/-/g, "")
+      : "";
+  const fallback = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return `t_${(bytes || fallback)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Schedule a background expiry sweep for a room that will eventually lapse. */
+export async function scheduleExpirySweep(
+  ctx: MutationCtx,
+  expiresAt: number,
+) {
+  try {
+    const delay = Math.min(Math.max(expiresAt - Date.now(), 60_000), 7 * 24 * 60 * 60_000);
+    await ctx.scheduler.runAfter(delay, internal.meetings.expireStaleMeetings, {});
+  } catch {
+    // expiry sweep is best-effort; joinRoom also enforces expiresAt inline
+  }
+}
 
 /** Generates a Google-Meet-style code like "abc-defg-hij". */
 export function generateRoomCode(): string {
@@ -38,11 +63,19 @@ export const createRoom = mutation({
         .withIndex("by_code", (q) => q.eq("code", code))
         .first();
       if (existing === null) {
+        const now = Date.now();
+        const expiresAt = now + INSTANT_MEETING_TTL_MS;
         await ctx.db.insert("rooms", {
           code,
           createdBy: userId,
-          createdAt: Date.now(),
+          createdAt: now,
+          status: "active",
+          startedAt: now,
+          expiresAt,
+          joinToken: generateJoinToken(),
+          locked: false,
         });
+        await scheduleExpirySweep(ctx, expiresAt);
         return code;
       }
     }
@@ -50,7 +83,13 @@ export const createRoom = mutation({
   },
 });
 
-/** Look up a room by code (normalized). Returns null if it doesn't exist. */
+/**
+ * Look up a room by code (normalized). Returns null if it doesn't exist.
+ * Also surfaces an `expired` flag computed from expiresAt so the frontend can
+ * show the right screen even before a join attempt flips the stored status
+ * (queries can't write, so the actual status flip happens in joinRoom / the
+ * expiry sweep).
+ */
 export const getRoom = query({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
@@ -62,7 +101,19 @@ export const getRoom = query({
       .first();
     if (room === null) return null;
     const host = await ctx.db.get(room.createdBy);
-    return { ...room, hostName: host?.name ?? "Host" };
+    const isTerminal =
+      room.status === "ended" ||
+      room.status === "cancelled" ||
+      room.status === "expired";
+    const expiredByTime =
+      !isTerminal &&
+      room.expiresAt !== undefined &&
+      room.expiresAt < Date.now();
+    return {
+      ...room,
+      hostName: host?.name ?? "Host",
+      expired: expiredByTime === true ? true : undefined,
+    };
   },
 });
 
