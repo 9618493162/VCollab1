@@ -465,7 +465,7 @@ export default function Landing() {
                   {[
                     ["Captions", "Live captions in the call, powered by your browser."],
                     ["Transcript", "Speaker-labeled transcription via Deepgram."],
-                    ["Summary & action items", "Overview, decisions, and follow-ups via Groq."],
+                    ["Summary & action items", "Overview, decisions, and follow-ups via NVIDIA AI."],
                     ["Meeting assistant", "Ask questions — answers are grounded in the actual transcript."],
                   ].map(([title, body]) => (
                     <li key={title} className="flex items-start gap-3">

@@ -619,7 +619,7 @@ function AiTab({ code }: { code: string }) {
             className="rounded-full"
             onClick={handleSummarize}
             disabled={busy !== null || !transcript}
-            title={transcript ? "Generate with OpenAI" : "No transcript yet"}
+            title={transcript ? "Generate AI summary" : "No transcript yet"}
           >
             {busy === "summarize" ? (
               <Loader2 className="mr-1.5 size-3.5 animate-spin" />

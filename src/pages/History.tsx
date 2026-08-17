@@ -498,7 +498,7 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
               <div className="py-10 text-center">
                 <p className="text-sm text-muted-foreground">
                   No minutes yet. Generate structured minutes from the
-                  transcript + agenda — works even without an OpenAI key (it
+                  transcript + agenda — works even without an AI key (it
                   falls back to a deterministic summary).
                 </p>
                 <Button

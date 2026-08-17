@@ -7,7 +7,7 @@
 // Providers:
 //   Transcription: DEEPGRAM_API_KEY (primary) → ASSEMBLYAI_API_KEY (fallback)
 //   LLM features (summary, action items, assistant, translation, minutes):
-//     GROQ_API_KEY → OPENROUTER_API_KEY → OPENAI_API_KEY
+//     NVIDIA_API_KEY → GROQ_API_KEY → OPENROUTER_API_KEY → OPENAI_API_KEY
 import { v } from "convex/values";
 import { action, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
@@ -47,15 +47,22 @@ async function loadAiData(
 }
 
 const LLM_NOT_CONFIGURED =
-  "AI isn't configured — add GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.";
+  "AI isn't configured — add NVIDIA_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.";
 
-/** Pick the first available LLM provider: Groq → OpenRouter → OpenAI. */
+/** Pick the first available LLM provider: NVIDIA → Groq → OpenRouter → OpenAI. */
 function pickLlm(): {
   key: string;
   baseUrl: string;
   model: string;
   label: string;
 } | null {
+  if (process.env.NVIDIA_API_KEY)
+    return {
+      key: process.env.NVIDIA_API_KEY,
+      baseUrl: "https://integrate.api.nvidia.com/v1",
+      model: "meta/muse-glimmer-30b",
+      label: "nvidia",
+    };
   if (process.env.GROQ_API_KEY)
     return {
       key: process.env.GROQ_API_KEY,
@@ -99,6 +106,9 @@ async function llmChat(
       model: provider.model,
       messages,
       temperature: 0.4,
+      // Room for reasoning models (e.g. NVIDIA's meta/muse-glimmer-30b) to
+      // finish thinking and then emit their final answer.
+      max_tokens: 4096,
     }),
   });
   if (!res.ok) {
@@ -108,10 +118,17 @@ async function llmChat(
     );
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: {
+      message?: { content?: string | null; reasoning_content?: string };
+    }[];
   };
+  const message = data.choices?.[0]?.message;
+  // Reasoning models return the visible answer in `content` (which can be
+  // null if a turn is cut off mid-thought). Fall back to the reasoning text
+  // so the user still gets a real response instead of an empty string.
+  const text = (message?.content ?? message?.reasoning_content ?? "").trim();
   return {
-    text: data.choices?.[0]?.message?.content?.trim() ?? "",
+    text,
     model: provider.model,
   };
 }
@@ -256,7 +273,7 @@ export const transcribeMeeting = action({
 
     // LLM-powered summary + action items when a provider is configured.
     let summary = "";
-    if (process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY) {
+    if (pickLlm()) {
       const src = lines || text;
       try {
         const { text: s, model } = await llmChat([
@@ -355,7 +372,7 @@ export const askAssistant = action({
     if (!pickLlm())
       return {
         answer:
-          "The AI assistant isn't configured — add GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.",
+          "The AI assistant isn't configured — add NVIDIA_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.",
         grounded: false,
       };
 
