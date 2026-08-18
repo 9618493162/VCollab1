@@ -359,6 +359,7 @@ export default function Call() {
 
   const meetingSettings = useQuery(api.security.getMeetingSettings, code ? { code } : "skip");
   const waitingList = useQuery(api.security.listWaitingParticipants, code ? { code } : "skip");
+  const prevWaitingCount = useRef(0);
   const renameRoom = useMutation(api.rooms.renameRoom);
   const admitParticipant = useMutation(api.security.admitParticipant);
   const admitAllWaiting = useMutation(api.security.admitAllWaiting);
@@ -367,6 +368,16 @@ export default function Call() {
   const muteAll = useMutation(api.security.muteAll);
   const isCoHost = meetingSettings?.coHosts?.includes(call.clientId) === true;
   const isModerator = isHost === true || isCoHost;
+
+  // Toast notification when someone new enters the waiting room
+  useEffect(() => {
+    if (!isModerator || !waitingList) return;
+    if (waitingList.length > prevWaitingCount.current) {
+      const newcomer = waitingList[waitingList.length - 1];
+      toast.info(`${newcomer?.name ?? "Someone"} is waiting to join`);
+    }
+    prevWaitingCount.current = waitingList.length;
+  }, [waitingList, isModerator]);
 
   const settings = useQuery(api.settings.getSettings);
   const preJoinTouched = useRef(false);
@@ -754,13 +765,16 @@ export default function Call() {
       {call.waiting && (
         <div className="relative z-10 flex h-full flex-col items-center justify-center gap-5 p-6 text-center">
           <div className="flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/50">
-            <DoorOpen className="size-7 text-muted-foreground" />
+            {room?.locked ? <Lock className="size-7 text-muted-foreground" /> : <DoorOpen className="size-7 text-muted-foreground" />}
           </div>
           <div>
-            <p className="font-display text-xl font-semibold">You're in the waiting room</p>
+            <p className="font-display text-xl font-semibold">
+              {room?.locked ? "Meeting is locked" : "You're in the waiting room"}
+            </p>
             <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-              The host will let you into <span className="font-mono text-muted-foreground">{code}</span>{" "}
-              shortly. Keep your mic and camera ready.
+              {room?.locked
+                ? "The host has locked this meeting. They've been notified that you want to join."
+                : <>The host will let you into <span className="font-mono text-muted-foreground">{code}</span>{" "}shortly. Keep your mic and camera ready.</>}
             </p>
           </div>
           <div className="flex items-center gap-1.5">

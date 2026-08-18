@@ -102,11 +102,9 @@ export const joinRoom = mutation({
     if (room.status === "ended") throw new Error("This meeting has ended.");
     if (room.status === "cancelled") throw new Error("This meeting was cancelled.");
     if (room.status === "expired") throw new Error("This meeting has expired.");
-    if (room.locked === true) throw new Error("This meeting is locked by the host.");
-
-    // waiting room: hold everyone except the host until they're admitted
+    // waiting room OR locked: hold everyone except the host until they're admitted
     const settings = await getMeetingSettings(ctx, normalized);
-    const waiting = settings?.waitingRoom === true && room.createdBy !== userId;
+    const waiting = room.locked === true || (settings?.waitingRoom === true && room.createdBy !== userId);
 
     const cleanName = name.trim().slice(0, 40) || "Guest";
     const now = Date.now();
@@ -156,8 +154,22 @@ export const joinRoom = mutation({
       userId,
     });
 
-    // people waiting don't join the mesh yet
-    if (waiting) return { waiting: true, participants: [] };
+    // people waiting don't join the mesh yet — notify the host
+    if (waiting) {
+      // Best-effort notification to the host so they know someone is outside.
+      try {
+        await createNotification(ctx, {
+          userId: room.createdBy,
+          type: "waiting",
+          title: `${cleanName} is waiting to join`,
+          body: room.locked ? "Meeting is locked" : "Waiting room is enabled",
+          link: `/call/${normalized}`,
+        });
+      } catch {
+        // host notification is best-effort; don't block the join attempt
+      }
+      return { waiting: true, participants: [] };
+    }
 
     // announce ourselves so existing participants open a connection to us
     await ctx.db.insert("signals", {

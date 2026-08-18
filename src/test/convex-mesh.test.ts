@@ -234,11 +234,14 @@ describe("two-tab meeting mesh (host tab + guest tab on a shared link)", () => {
       userId: hostId,
     });
 
-    // locked -> guests clicking the link get a clear refusal
+    // locked -> guests are placed in the waiting room (host is notified)
     await host.mutation(api.meetings.lockMeeting, { code, locked: true });
-    await expect(
-      t.mutation(api.call.joinRoom, { code, clientId: TAB_B, name: "Guest", userId: undefined }),
-    ).rejects.toThrow(/locked/i);
+    const lockedRes = await t.mutation(api.call.joinRoom, { code, clientId: TAB_B, name: "Guest", userId: undefined });
+    expect(lockedRes).toEqual({ waiting: true, participants: [] });
+    // The host can see the waiting guest
+    const waitingList = await host.query(api.security.listWaitingParticipants, { code });
+    expect(waitingList).toHaveLength(1);
+    expect(waitingList[0].name).toBe("Guest");
     await host.mutation(api.meetings.lockMeeting, { code, locked: false });
 
     // ended -> same refusal, plus an "end" broadcast tells in-room clients
