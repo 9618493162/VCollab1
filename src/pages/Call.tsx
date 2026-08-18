@@ -1085,9 +1085,11 @@ export default function Call() {
               <div
                 className={cn(
                   "grid h-full w-full content-center justify-items-center gap-3 overflow-y-auto sm:gap-4",
-                  view === "speaker" && activeSpeakerId
-                    ? "grid-cols-1 lg:grid-cols-2"
-                    : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+                  Object.keys(call.remoteStreams).length === 0
+                    ? "grid-cols-1"
+                    : view === "speaker" && activeSpeakerId
+                      ? "grid-cols-1 lg:grid-cols-2"
+                      : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
                 )}
               >
                 {/* self tile (gallery) */}
