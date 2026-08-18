@@ -85,7 +85,7 @@ import { QAPanel } from "@/components/QAPanel";
 import { AgendaPanel } from "@/components/AgendaPanel";
 import { BreakoutsPanel } from "@/components/BreakoutsPanel";
 import { WhiteboardOverlay } from "@/components/WhiteboardOverlay";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -138,6 +138,39 @@ function VideoSurface({
       muted
       className={cn("h-full w-full object-cover", className)}
     />
+  );
+}
+
+/**
+ * Hidden audio element that plays a remote participant's audio track.
+ * This is necessary because VideoSurface is always muted (to prevent
+ * feedback on self-view), so remote audio needs a separate renderer.
+ */
+function RemoteAudioPlayer({ stream, peer }: { stream: MediaStream | null; peer: string }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (ref.current && ref.current.srcObject !== stream) {
+      ref.current.srcObject = stream;
+      // Ensure playback starts (handles browsers that block autoplay)
+      ref.current.play().catch(() => {
+        // Autoplay blocked — user needs to interact first
+      });
+    }
+  }, [stream]);
+  // Also resume when the stream's audio tracks change (e.g. unmute)
+  useEffect(() => {
+    if (!stream) return;
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    const track = audioTracks[0];
+    const onUnmute = () => {
+      ref.current?.play().catch(() => {});
+    };
+    track.addEventListener("unmute", onUnmute);
+    return () => track.removeEventListener("unmute", onUnmute);
+  }, [stream]);
+  return (
+    <audio ref={ref} data-peer={peer} autoPlay playsInline className="hidden" />
   );
 }
 
@@ -270,6 +303,7 @@ export default function Call() {
   const [showInfo, setShowInfo] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [audioBlocked, setAudioBlocked] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -296,6 +330,28 @@ export default function Call() {
     },
     token,
   );
+
+  /** Resume audio on all remote players — needed when browser blocks autoplay */
+  const unblockAudio = useCallback(() => {
+    document.querySelectorAll<HTMLAudioElement>("audio[data-peer]").forEach((el) => {
+      el.play().catch(() => {});
+    });
+    setAudioBlocked(false);
+  }, []);
+
+  // Detect audio autoplay blocking
+  useEffect(() => {
+    if (!entered) return;
+    const check = () => {
+      const audios = document.querySelectorAll<HTMLAudioElement>("audio[data-peer]");
+      const blocked = Array.from(audios).some((el) => el.paused && !el.ended);
+      setAudioBlocked(blocked && call.remoteStreams && Object.keys(call.remoteStreams).length > 0);
+    };
+    const timer = setTimeout(check, 2000);
+    const id = setInterval(check, 5000);
+    return () => { clearTimeout(timer); clearInterval(id); };
+  }, [entered, call.remoteStreams]);
+
   const lockMeeting = useMutation(api.meetings.lockMeeting);
   const endMeeting = useMutation(api.meetings.endMeeting);
   const createRoom = useMutation(api.rooms.createRoom);
@@ -1231,6 +1287,19 @@ export default function Call() {
             )}
           </main>
 
+          {/* ---------- audio unblock banner ---------- */}
+          {audioBlocked && (
+            <div className="relative z-10 flex justify-center px-4 pb-1">
+              <button
+                type="button"
+                onClick={unblockAudio}
+                className="rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-300 backdrop-blur-sm transition-colors hover:bg-amber-500/20"
+              >
+                🔊 Enable Meeting Audio
+              </button>
+            </div>
+          )}
+
           {/* ---------- control bar ---------- */}
           <footer className="relative z-10 flex shrink-0 items-center justify-center px-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:pb-5 sm:px-3">
             <div className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-background/80 px-2 py-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:gap-2 sm:p-2">
@@ -1830,6 +1899,7 @@ function Tile({
         speaking ? "ring-2 ring-primary speaking-ring" : "ring-1 ring-black/10 dark:ring-white/10",
       )}
     >
+      <RemoteAudioPlayer stream={stream} peer={peerId} />
       {camOff ? (
         <Avatar name={name} />
       ) : (
