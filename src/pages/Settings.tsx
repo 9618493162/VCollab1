@@ -349,7 +349,9 @@ export default function SettingsPage() {
 
 function SecuritySection() {
   const { user } = useAuth();
+  const hasPassword = useQuery(api.users.hasPassword);
   const changePassword = useAction(api.auth.changePassword.changePassword);
+  const setPassword = useAction(api.auth.changePassword.setPassword);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -357,13 +359,18 @@ function SecuritySection() {
   const [changing, setChanging] = useState(false);
   const [changed, setChanged] = useState(false);
 
+  // true = account has a password credential (can change)
+  // false = OAuth-only (can set a new password)
+  // undefined = still loading
+  const accountHasPassword = hasPassword ?? undefined;
+
   const canChange =
     !user?.isAnonymous &&
-    currentPassword.length > 0 &&
     newPassword.length >= 8 &&
-    newPassword === confirmPassword;
+    newPassword === confirmPassword &&
+    (accountHasPassword ? currentPassword.length > 0 : true);
 
-  const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (newPassword !== confirmPassword) {
       toast.error("New passwords don't match.");
@@ -376,17 +383,22 @@ function SecuritySection() {
     setChanging(true);
     setChanged(false);
     try {
-      await changePassword({ currentPassword, newPassword });
+      if (accountHasPassword) {
+        await changePassword({ currentPassword, newPassword });
+        toast.success(
+          "Password changed. You've been signed out of other devices.",
+        );
+      } else {
+        await setPassword({ password: newPassword });
+        toast.success("Password set! You can now sign in with email and password.");
+      }
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setChanged(true);
-      toast.success(
-        "Password changed. You've been signed out of other devices.",
-      );
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Couldn't change the password.",
+        error instanceof Error ? error.message : "Couldn't update the password.",
       );
     } finally {
       setChanging(false);
@@ -404,36 +416,44 @@ function SecuritySection() {
           You're signed in as a guest, which has no password. Sign in with an
           email to set up password security.
         </div>
+      ) : accountHasPassword === undefined ? (
+        <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Loading security info…
+        </div>
       ) : (
-        <form onSubmit={(e) => void handleChangePassword(e)} className="mt-5">
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-5">
           <p className="text-xs text-muted-foreground">
-            Changing your password signs you out of every other device. Your
-            current session stays signed in.
+            {accountHasPassword
+              ? "Changing your password signs you out of every other device. Your current session stays signed in."
+              : "Your account was created with a social provider and has no password yet. Set one so you can also sign in with email and password."}
           </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <div>
-              <label
-                htmlFor="current-password"
-                className="text-xs font-medium text-muted-foreground"
-              >
-                Current password
-              </label>
-              <Input
-                id="current-password"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="••••••••"
-                className="mt-1.5"
-              />
-            </div>
+          <div className="mt-4 grid gap-4" style={{ gridTemplateColumns: accountHasPassword ? "repeat(3, 1fr)" : "repeat(2, 1fr)" }}>
+            {accountHasPassword && (
+              <div>
+                <label
+                  htmlFor="current-password"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Current password
+                </label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="mt-1.5"
+                />
+              </div>
+            )}
             <div>
               <label
                 htmlFor="new-password"
                 className="text-xs font-medium text-muted-foreground"
               >
-                New password
+                {accountHasPassword ? "New password" : "Password"}
               </label>
               <Input
                 id="new-password"
@@ -450,7 +470,7 @@ function SecuritySection() {
                 htmlFor="confirm-password"
                 className="text-xs font-medium text-muted-foreground"
               >
-                Confirm new password
+                Confirm {accountHasPassword ? "new " : ""}password
               </label>
               <Input
                 id="confirm-password"
@@ -466,7 +486,7 @@ function SecuritySection() {
           <div className="mt-4 flex items-center justify-end gap-3">
             {changed && (
               <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                Password updated ✓
+                {accountHasPassword ? "Password updated ✓" : "Password set ✓"}
               </p>
             )}
             <Button
@@ -480,7 +500,9 @@ function SecuritySection() {
               ) : (
                 <KeyRound className="mr-1.5 size-3.5" />
               )}
-              {changing ? "Changing…" : "Change password"}
+              {changing
+                ? (accountHasPassword ? "Changing…" : "Setting…")
+                : (accountHasPassword ? "Change password" : "Set password")}
             </Button>
           </div>
         </form>

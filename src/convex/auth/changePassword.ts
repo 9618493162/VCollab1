@@ -87,3 +87,52 @@ export const changePassword = action({
     return { success: true };
   },
 });
+
+/**
+ * Set a password for the first time on an OAuth-only account.
+ *
+ * For users who signed in via Google / GitHub / OTP and never had a
+ * password credential.  Creates a new "password" auth account linked to
+ * the same user, so they can sign in with email + password in the future.
+ * Does NOT invalidate existing sessions — the current session stays
+ * signed in.
+ */
+export const setPassword = action({
+  args: {
+    password: v.string(),
+  },
+  handler: async (ctx, { password }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new Error("You must be signed in to set a password.");
+    }
+    if (typeof password !== "string" || password.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
+    }
+
+    const user = await ctx.runQuery(api.users.currentUser);
+    const email = user?.email?.trim().toLowerCase();
+    if (!email) {
+      throw new Error(
+        "This account has no email on file — add an email first.",
+      );
+    }
+
+    // Check the user doesn't already have a password account.
+    const hasPw = await ctx.runQuery(api.users.hasPassword);
+    if (hasPw) {
+      throw new Error(
+        "This account already has a password — use Change password instead.",
+      );
+    }
+
+    // Create the password credential.  `modifyAccountCredentials` will
+    // upsert the authAccounts row with the Scrypt-hashed secret.
+    await modifyAccountCredentials(ctx, {
+      provider: "password",
+      account: { id: email, secret: password },
+    });
+
+    return { success: true };
+  },
+});

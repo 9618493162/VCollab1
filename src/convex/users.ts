@@ -53,6 +53,27 @@ export const emailExists = query({
 });
 
 /**
+ * Whether the current user has a password credential linked to their account.
+ * OAuth-only users (Google, GitHub, etc.) don't have a password until they
+ * explicitly set one.  Used by Settings → Security to toggle between
+ * "Set a password" and "Change password".
+ */
+export const hasPassword = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return false;
+    const account = await ctx.db
+      .query("authAccounts")
+      .withIndex("userIdAndProvider", (q) =>
+        q.eq("userId", userId).eq("provider", "password"),
+      )
+      .first();
+    return account !== null;
+  },
+});
+
+/**
  * Search registered, non-guest users by name or email (for invite pickers).
  * Excludes the signed-in user. Best-effort substring match, capped results.
  */
