@@ -1070,7 +1070,7 @@ export default function Call() {
             ) : (
               <div
                 className={cn(
-                  "grid h-full w-full content-center gap-3 overflow-y-auto sm:gap-4",
+                  "grid h-full w-full content-center justify-items-center gap-3 overflow-y-auto sm:gap-4",
                   view === "speaker" && activeSpeakerId
                     ? "grid-cols-1 lg:grid-cols-2"
                     : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -1135,13 +1135,12 @@ export default function Call() {
 
                 {Object.keys(call.remoteStreams).length === 0 &&
                   call.participants?.length === 1 && (
-                    <div className="col-span-full flex h-full min-h-[220px] flex-col items-center justify-center text-center">
+                    <div className="col-span-full flex h-full min-h-[300px] flex-col items-center justify-center text-center px-4">
                       <p className="text-lg font-extralight text-muted-foreground">
                         You're the first one here.
                       </p>
                       <p className="mt-2 max-w-sm text-sm text-muted-foreground/70">
-                        Share the code to bring people in. Open the link in
-                        another tab to test the call.
+                        Share the code to bring people in.
                       </p>
                     </div>
                   )}
@@ -1476,27 +1475,28 @@ export default function Call() {
                 >
                   {room?.locked ? <Lock className="size-5" /> : <LockOpen className="size-5" />}
                 </ControlButton>
-                <Button
-                  onClick={() => setConfirmEnd(true)}
-                  className="ml-1 h-10 w-10 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
-                  aria-label="End meeting for everyone"
-                  title="End for everyone"
-                >
-                  <PhoneOff className="size-5" />
-                </Button>
               </div>
             )}
-
-            {!isHost && (
-              <Button
-                onClick={handleLeave}
-                className="ml-1 h-10 w-10 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
-                aria-label="Leave meeting"
-              >
-                <PhoneOff className="size-5" />
-              </Button>
-            )}
           </div>
+          {/* End/Leave button — always visible outside scroll area */}
+          {isHost ? (
+            <Button
+              onClick={() => setConfirmEnd(true)}
+              className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
+              aria-label="End meeting for everyone"
+              title="End for everyone"
+            >
+              <PhoneOff className="size-5" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleLeave}
+              className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
+              aria-label="Leave meeting"
+            >
+              <PhoneOff className="size-5" />
+            </Button>
+          )}
           </footer>
 
           {/* ---------- confirm before ending the meeting for everyone ---------- */}
