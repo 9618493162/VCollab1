@@ -958,7 +958,7 @@ export default function Call() {
           </header>
 
           {/* ---------- stage ---------- */}
-          <main className="relative z-10 flex-1 overflow-hidden p-3 sm:p-4">
+          <main className="call-page-main relative z-10 p-3 sm:p-4">
             {isMissing ? (
               <div className="flex h-full flex-col items-center justify-center text-center">
                 <p className="text-sm text-muted-foreground">This meeting doesn't exist (yet).</p>
@@ -1232,8 +1232,8 @@ export default function Call() {
           </main>
 
           {/* ---------- control bar ---------- */}
-          <footer className="relative z-10 flex h-24 shrink-0 items-center justify-center px-2 pb-5 sm:px-3">
-            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-border/60 bg-background/80 p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:gap-2">
+          <footer className="relative z-10 flex shrink-0 items-center justify-center px-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:pb-5 sm:px-3">
+            <div className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-background/80 px-2 py-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:gap-2 sm:p-2">
             <ControlButton
               active={call.micOn}
               activeClass="bg-foreground text-background"
@@ -1409,7 +1409,7 @@ export default function Call() {
                 </ControlButton>
                 <Button
                   onClick={() => setConfirmEnd(true)}
-                  className="ml-1 h-11 w-11 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-12 sm:w-12"
+                  className="ml-1 h-10 w-10 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
                   aria-label="End meeting for everyone"
                   title="End for everyone"
                 >
@@ -1421,7 +1421,7 @@ export default function Call() {
             {!isHost && (
               <Button
                 onClick={handleLeave}
-                className="ml-1 h-11 w-11 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-12 sm:w-12"
+                className="ml-1 h-10 w-10 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
                 aria-label="Leave meeting"
               >
                 <PhoneOff className="size-5" />
@@ -1894,7 +1894,7 @@ function ControlButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-11 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 sm:size-12",
+        "flex size-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 sm:size-11 md:size-12",
         active ? activeClass : inactiveClass,
       )}
     >
@@ -1920,7 +1920,7 @@ function ChatPanel({
   }, [call.messages?.length]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
+    <aside className="absolute inset-y-0 right-0 z-40 flex h-full w-full flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="text-sm font-medium">Chat</p>
         <button
@@ -2026,7 +2026,7 @@ function PeoplePanel({
   }, [call.participants, search]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex w-full max-w-xs flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
+    <aside className="absolute inset-y-0 right-0 z-40 flex h-full w-full flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
         <p className="text-sm font-medium">
           People{" "}

@@ -347,3 +347,21 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent) transparent;
 }
+
+/* hide scrollbar on toolbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* prevent mobile keyboard from pushing layout */
+.call-page-main {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
