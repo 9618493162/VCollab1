@@ -365,3 +365,20 @@
   flex: 1;
   min-height: 0;
 }
+
+/* Ensure the meeting page locks the viewport — no page scroll */
+body.meeting-active {
+  overflow: hidden !important;
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Side panel must overlay, never shift the meeting layout */
+/* On mobile the panel covers the full screen; on desktop it is 320px */
+@media (max-width: 639px) {
+  .call-page-main + footer ~ div[style] {
+    max-width: 100vw;
+  }
+}

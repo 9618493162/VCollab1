@@ -633,6 +633,31 @@ export default function Call() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entered]);
 
+
+  // Lock body/html scroll during the meeting to prevent vertical shift
+  useEffect(() => {
+    if (!entered) return;
+    const prevHtml = document.documentElement.style.overflow;
+    const prevBody = document.body.style.overflow;
+    const prevBodyPos = document.body.style.position;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = "0";
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.classList.add("meeting-active");
+    return () => {
+      document.documentElement.style.overflow = prevHtml;
+      document.body.style.overflow = prevBody;
+      document.body.style.position = prevBodyPos;
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.classList.remove("meeting-active");
+    };
+  }, [entered]);
+
   const participantCount = call.participants?.length ?? (entered ? 1 : 0);
   const selfStream = call.sharing ? call.shareStream : call.localStream;
 

@@ -116,7 +116,7 @@ export function FluidPanel({
       animate={{ x: 0, y: 0, opacity: 1 }}
       exit={reduce ? undefined : { x: dx, y: dy, opacity: 0 }}
       transition={{ type: "spring", stiffness: 360, damping: 34, mass: 0.9 }}
-      className={cn("absolute inset-y-0 right-0 z-40 w-full sm:max-w-xs", className)}
+      className={cn("fixed inset-y-0 right-0 z-40 w-full sm:w-80", className)}
       {...props}
     >
       {children}
