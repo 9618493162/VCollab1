@@ -207,7 +207,7 @@ export const scheduleMeeting = mutation({
       const occTime = times[i];
 
       let code = "";
-      for (let attempt = 0; attempt < 5; attempt++) {
+      for (let attempt = 0; attempt < 10; attempt++) {
         const candidate = generateRoomCode();
         const existing = await ctx.db
           .query("rooms")

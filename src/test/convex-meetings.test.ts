@@ -49,7 +49,7 @@ describe("scheduled meetings", () => {
       durationMinutes: 25,
       attendees: ["INVITEE@example.com", "invitee@example.com", "missing@example.com"],
     });
-    expect(code).toMatch(/^[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3}$/);
+    expect(code).toMatch(/^VC-[A-HJKMNP-Z2-9]{6}$/);
 
     // The room exists immediately, marked as scheduled.
     const room = await t.query(api.rooms.getRoom, { code });

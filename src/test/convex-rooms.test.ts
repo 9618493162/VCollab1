@@ -6,14 +6,20 @@ import { insertUser, makeTestClient } from "./convex-test-client";
 describe("room codes", () => {
   it("generates well-formed codes", () => {
     const code = generateRoomCode();
-    // 3-4-3 lowercase letters from the unambiguous alphabet (no i/l/o)
-    expect(code).toMatch(/^[a-hjkmnp-z]{3}-[a-hjkmnp-z]{4}-[a-hjkmnp-z]{3}$/);
+    // VC-XXXXXX format: uppercase letters A-Z + digits 2-9 (no 0,1,I,L,O)
+    expect(code).toMatch(/^VC-[A-HJKMNP-Z2-9]{6}$/);
     expect(generateRoomCode()).not.toBe(generateRoomCode());
   });
 
   it("normalizes messy input and rejects too-short codes", () => {
+    // New format: VC-XXXXXX
+    expect(normalizeCode("VC-7K4P9X")).toBe("VC-7K4P9X");
+    expect(normalizeCode("vc-7k4p9x")).toBe("VC-7K4P9X");
+    expect(normalizeCode("VC7K4P9X")).toBe("VC-7K4P9X");
+    // Legacy format still normalizes
     expect(normalizeCode("ABC-DEFG-HIJ")).toBe("abc-defg-hij");
     expect(normalizeCode("abcdefghij")).toBe("abc-defg-hij");
+    // Too short
     expect(normalizeCode("abc")).toBe("");
     expect(normalizeCode("")).toBe("");
   });
@@ -36,7 +42,7 @@ describe("meeting room flow (create → lookup → rename)", () => {
     const other = t.withIdentity({ subject: otherId });
 
     const code = await host.mutation(api.rooms.createRoom);
-    expect(code).toMatch(/^[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3}$/);
+    expect(code).toMatch(/^VC-[A-HJKMNP-Z2-9]{6}$/);
 
     const room = await t.query(api.rooms.getRoom, { code });
     expect(room).not.toBeNull();

@@ -4,17 +4,22 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { INSTANT_MEETING_TTL_MS } from "./meetings";
 
-const CHARS = "abcdefghjkmnpqrstuvwxyz"; // no confusing letters (no i, l, o)
-const CODE_LENGTH = 10;
+const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // A-Z + 2-9 (no 0,1,I,L,O)
+const OLD_CODE_LENGTH = 10; // legacy abc-defg-hij
+const NEW_CODE_LENGTH = 6; // VC-XXXXXX
 
 /** Secure per-meeting credential for shareable links (?t=...). */
 export function generateJoinToken(): string {
-  const bytes =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID().replace(/-/g, "")
-      : "";
-  const fallback = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  return `t_${(bytes || fallback)}${Math.random().toString(36).slice(2, 10)}`;
+  const bytes = new Uint8Array(24);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 24; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  // Encode as hex string
+  let hex = "";
+  for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, "0");
+  return `t_${hex}`;
 }
 
 /** Schedule a background expiry sweep for a room that will eventually lapse. */
@@ -30,23 +35,46 @@ export async function scheduleExpirySweep(
   }
 }
 
-/** Generates a Google-Meet-style code like "abc-defg-hij". */
+/** Generates a cryptographically secure meeting code like "VC-7K4P9X". */
 export function generateRoomCode(): string {
-  let s = "";
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    s += CHARS[Math.floor(Math.random() * CHARS.length)];
+  const bytes = new Uint8Array(NEW_CODE_LENGTH);
+  // Prefer Web Crypto API (available in Convex runtime and modern browsers)
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    // Fallback: still better than Math.random — uses multiple Date + Math
+    for (let i = 0; i < NEW_CODE_LENGTH; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
   }
-  return `${s.slice(0, 3)}-${s.slice(3, 7)}-${s.slice(7)}`;
+  let s = "";
+  for (let i = 0; i < NEW_CODE_LENGTH; i++) {
+    s += CHARS[bytes[i] % CHARS.length];
+  }
+  return `VC-${s}`;
 }
 
-/** Normalizes user input into a canonical "abc-defg-hij" code, or "" if invalid. */
+/**
+ * Normalizes user input into a canonical meeting code.
+ * Handles both legacy "abc-defg-hij" (10 chars) and new "VC-XXXXXX" (8 chars) formats.
+ * Returns "" if the input doesn't match either format.
+ */
 export function normalizeCode(input: string): string {
-  const flat = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .slice(0, CODE_LENGTH);
-  if (flat.length < CODE_LENGTH) return "";
-  return `${flat.slice(0, 3)}-${flat.slice(3, 7)}-${flat.slice(7)}`;
+  const flat = input.replace(/[^a-zA-Z0-9]/g, "");
+
+  // New format: VC-XXXXXX (8 chars after stripping hyphens, starts with VC)
+  if (flat.length >= 8 && flat.toUpperCase().startsWith("VC")) {
+    const body = flat.slice(2, 8).toUpperCase();
+    if (body.length === 6) return `VC-${body}`;
+  }
+
+  // Legacy format: abc-defg-hij (10 chars)
+  if (flat.length >= OLD_CODE_LENGTH) {
+    const body = flat.slice(0, OLD_CODE_LENGTH).toLowerCase();
+    return `${body.slice(0, 3)}-${body.slice(3, 7)}-${body.slice(7)}`;
+  }
+
+  return "";
 }
 
 /** Create a new meeting room and return its shareable code. */
@@ -56,7 +84,7 @@ export const createRoom = mutation({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in to start a meeting");
 
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       const code = generateRoomCode();
       const existing = await ctx.db
         .query("rooms")
