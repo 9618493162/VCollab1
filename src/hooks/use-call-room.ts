@@ -488,6 +488,9 @@ export function useCallRoom(
           void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
         }
         void leave();
+      } else if (sig.kind === "host") {
+        // Host was transferred — the reactive isHost query will update the UI.
+        // No action needed here; Convex reactivity handles it.
       } else if (sig.kind === "mute") {
         // mute-all broadcasts to everyone; the sender skips themselves
         if (payload.from === clientId) return;

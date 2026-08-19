@@ -802,6 +802,7 @@ export const endMeeting = mutation({
     await ctx.db.patch(room._id, {
       status: "ended",
       endedAt: now,
+      endedBy: userId,
       expiresAt: now,
       joinToken: undefined,
       participantCount: Math.max(live.length, 1),

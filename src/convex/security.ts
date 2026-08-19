@@ -268,7 +268,74 @@ export const transferHost = mutation({
       .collect();
     const target = rows.find((r) => r.userId === userId);
     if (target === undefined) throw new Error("That person isn't in the meeting.");
+    if (target.waiting) throw new Error("That person is still in the waiting room.");
+    const now = Date.now();
     await ctx.db.patch(room._id, { createdBy: userId });
+    await ctx.db.insert("signals", {
+      code: room.code,
+      from: room.createdBy,
+      to: "*",
+      kind: "host",
+      payload: JSON.stringify({ hostId: userId, previousHostId: room.createdBy, timestamp: now }),
+      createdAt: now,
+    });
+  },
+});
+
+/**
+ * Atomically transfer host and leave the meeting.
+ * The old host becomes a normal participant then leaves.
+ * The meeting continues with the new host.
+ */
+export const transferAndLeave = mutation({
+  args: { code: v.string(), targetUserId: v.id("users"), clientId: v.string() },
+  handler: async (ctx, { code, targetUserId, clientId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to transfer host.");
+    const room = await getRoom(ctx, code);
+    if (room === null) throw new Error("Meeting not found.");
+    if (room.createdBy !== userId) throw new Error("Only the host can transfer host.");
+    if (room.status === "ended" || room.status === "expired" || room.status === "cancelled")
+      throw new Error("This meeting is no longer active.");
+    if (targetUserId === userId) throw new Error("You are already the host.");
+
+    // Verify target is an active, non-waiting participant
+    const rows = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", room.code))
+      .collect();
+    const target = rows.find((r) => r.userId === targetUserId);
+    if (!target) throw new Error("That person isn't in the meeting.");
+    if (target.waiting) throw new Error("That person is still in the waiting room.");
+
+    const now = Date.now();
+
+    // 1. Transfer host atomically
+    await ctx.db.patch(room._id, { createdBy: targetUserId });
+
+    // 2. Remove old host's presence (they're leaving)
+    const oldHostPresence = rows.find((r) => r.clientId === clientId || r.userId === userId);
+    if (oldHostPresence) await ctx.db.delete(oldHostPresence._id);
+
+    // 3. Broadcast host transfer event
+    await ctx.db.insert("signals", {
+      code: room.code,
+      from: userId,
+      to: "*",
+      kind: "host",
+      payload: JSON.stringify({ hostId: targetUserId, previousHostId: userId, timestamp: now }),
+      createdAt: now,
+    });
+
+    // 4. Broadcast that old host left
+    await ctx.db.insert("signals", {
+      code: room.code,
+      from: clientId,
+      to: "*",
+      kind: "bye",
+      payload: JSON.stringify({ clientId }),
+      createdAt: now,
+    });
   },
 });
 

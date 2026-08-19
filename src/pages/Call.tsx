@@ -305,6 +305,8 @@ export default function Call() {
   const [confirmStop, setConfirmStop] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [hostLeaveMode, setHostLeaveMode] = useState<false | "pick-transfer" | false>(false);
+  const [transferTarget, setTransferTarget] = useState<Id<"users"> | null>(null);
   const [meetingEnded, setMeetingEnded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -358,6 +360,7 @@ export default function Call() {
   const endMeeting = useMutation(api.meetings.endMeeting);
   const createRoom = useMutation(api.rooms.createRoom);
   const transferHost = useMutation(api.meetings.transferHost);
+  const transferAndLeave = useMutation(api.security.transferAndLeave);
 
   const meetingSettings = useQuery(api.security.getMeetingSettings, code ? { code } : "skip");
   const waitingList = useQuery(api.security.listWaitingParticipants, code ? { code } : "skip");
@@ -562,6 +565,21 @@ export default function Call() {
       toast.success("Hosting transferred.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't transfer hosting.");
+    }
+  };
+
+  const handleTransferAndLeave = async () => {
+    if (!transferTarget) {
+      toast.error("Select a participant to transfer host to.");
+      return;
+    }
+    try {
+      await transferAndLeave({ code, targetUserId: transferTarget, clientId: call.clientId });
+      toast.success("Host transferred. Leaving meeting…");
+      await call.leave();
+      navigate(isAuthenticated ? "/dashboard" : "/");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't transfer and leave.");
     }
   };
 
@@ -1552,8 +1570,8 @@ export default function Call() {
             <Button
               onClick={() => setConfirmEnd(true)}
               className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
-              aria-label="End meeting for everyone"
-              title="End for everyone"
+              aria-label="End or leave meeting"
+              title="End / Leave"
             >
               <PhoneOff className="size-5" />
             </Button>
@@ -1568,27 +1586,108 @@ export default function Call() {
           )}
           </footer>
 
-          {/* ---------- confirm before ending the meeting for everyone ---------- */}
-          <AlertDialog open={confirmEnd} onOpenChange={setConfirmEnd}>
-            <AlertDialogContent className="border-border/60">
-              <AlertDialogHeader>
-                <AlertDialogTitle>End meeting for everyone?</AlertDialogTitle>
-                <AlertDialogDescription className="text-muted-foreground">
-                  All participants will be disconnected and the meeting
-                  link/code will become invalid.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="border-border/60">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-red-500 text-white hover:bg-red-600"
-                  onClick={() => void handleEndForAll()}
-                >
-                  End Meeting
-                </AlertDialogAction>
-              </AlertDialogFooter>
+          {/* ---------- host leave dialog: Transfer & Leave / End / Cancel ---------- */}
+          <AlertDialog open={confirmEnd} onOpenChange={(open) => { setConfirmEnd(open); if (!open) { setHostLeaveMode(false); setTransferTarget(null); } }}>
+            <AlertDialogContent className="border-border/60 sm:max-w-md">
+              {!hostLeaveMode ? (
+                <>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>You're the host</AlertDialogTitle>
+                    <AlertDialogDescription className="text-muted-foreground">
+                      Choose what to do before leaving. You can transfer host to a participant, end the meeting for everyone, or simply leave.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="flex flex-col gap-2 py-2">
+                    <Button
+                      variant="outline"
+                      className="justify-start gap-3 rounded-xl border-border/60"
+                      onClick={() => setHostLeaveMode("pick-transfer")}
+                    >
+                      <Crown className="size-4 text-amber-500" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Transfer host & leave</p>
+                        <p className="text-[11px] text-muted-foreground">Hand off to another participant, then leave</p>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="justify-start gap-3 rounded-xl border-border/60 hover:border-red-500/40 hover:bg-red-500/5"
+                      onClick={() => void handleEndForAll()}
+                    >
+                      <PhoneOff className="size-4 text-red-500" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium">End meeting for everyone</p>
+                        <p className="text-[11px] text-muted-foreground">Close the meeting for all participants</p>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="justify-start gap-3 rounded-xl border-border/60"
+                      onClick={handleLeave}
+                    >
+                      <LogOut className="size-4 text-muted-foreground" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Leave meeting</p>
+                        <p className="text-[11px] text-muted-foreground">Meeting continues without you</p>
+                      </div>
+                    </Button>
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-full">Cancel</AlertDialogCancel>
+                  </AlertDialogFooter>
+                </>
+              ) : (
+                <>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Transfer host to…</AlertDialogTitle>
+                    <AlertDialogDescription className="text-muted-foreground">
+                      Select a participant to make them the new host. You'll leave the meeting after the transfer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="max-h-60 space-y-1 overflow-y-auto py-2">
+                    {(call.participants ?? []).filter((p) => p.userId && p.userId !== user?._id && !p.waiting).map((p) => (
+                      <button
+                        key={p.clientId}
+                        type="button"
+                        onClick={() => setTransferTarget(p.userId!)}
+                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                          transferTarget === p.userId
+                            ? "bg-primary/10 ring-1 ring-primary/50"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        <div className="flex size-8 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                          {p.name?.charAt(0)?.toUpperCase() ?? "?"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{p.name}</p>
+                          {isCoHost && p.clientId === call.clientId && (
+                            <p className="text-[10px] text-muted-foreground">you</p>
+                          )}
+                        </div>
+                        {transferTarget === p.userId && (
+                          <Check className="size-4 text-primary" />
+                        )}
+                      </button>
+                    ))}
+                    {(call.participants ?? []).filter((p) => p.userId && p.userId !== user?._id && !p.waiting).length === 0 && (
+                      <p className="py-4 text-center text-sm text-muted-foreground">No eligible participants to transfer to.</p>
+                    )}
+                  </div>
+                  <AlertDialogFooter>
+                    <Button variant="ghost" className="rounded-full" onClick={() => setHostLeaveMode(false)}>
+                      Back
+                    </Button>
+                    <Button
+                      className="rounded-full"
+                      disabled={!transferTarget}
+                      onClick={() => void handleTransferAndLeave()}
+                    >
+                      Transfer & Leave
+                    </Button>
+                  </AlertDialogFooter>
+                </>
+              )}
             </AlertDialogContent>
           </AlertDialog>
 

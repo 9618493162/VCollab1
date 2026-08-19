@@ -53,6 +53,7 @@ const schema = defineSchema(
       ),
       startedAt: v.optional(v.number()),
       endedAt: v.optional(v.number()),
+      endedBy: v.optional(v.id("users")),
       // hard deadline for joinability (epoch ms). Past this the meeting is
       // treated as expired by the backend even if status was never flipped.
       expiresAt: v.optional(v.number()),
