@@ -139,7 +139,20 @@ export const joinRoom = mutation({
       }
     }
 
-    // replace any stale presence row for this client
+    // Clean up any stale presence rows for THIS user from previous sessions.
+    // A user who left without proper cleanup may still have an orphaned row.
+    if (userId) {
+      const allPresence = await ctx.db
+        .query("presence")
+        .withIndex("by_code", (q) => q.eq("code", normalized))
+        .collect();
+      for (const p of allPresence) {
+        if (p.userId === userId && p.clientId !== clientId) {
+          await ctx.db.delete(p._id);
+        }
+      }
+    }
+    // Also clean up any stale row with the same clientId (e.g. fast rejoin)
     const stale = await findPresence(ctx, normalized, clientId);
     if (stale) await ctx.db.delete(stale._id);
 

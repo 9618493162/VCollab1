@@ -144,6 +144,17 @@ export function useCallRoom(
       : `p_${Math.random().toString(36).slice(2, 12)}`,
   );
 
+  // Unique session ID per mount — filters stale signals from previous sessions
+  const sessionId = useRef(
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `s_${Math.random().toString(36).slice(2, 12)}`,
+  );
+  // Tracks when this session joined so we can ignore old signals
+  const joinTimestampRef = useRef(0);
+  // Set to true after leave() has called leaveRoom, prevents cleanup from double-calling
+  const leftRef = useRef(false);
+
   // ---- media ----
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -375,8 +386,8 @@ export function useCallRoom(
 
   const leave = useCallback(async () => {
     if (!joinedRef.current) return;
-    joinedRef.current = false;
-    setJoined(false);
+    // Mark as leaving BEFORE async work so the unmount cleanup doesn't double-call leaveRoom
+    leftRef.current = true;
     // A cloud recording is owned by the LiveKit server — leaving must NOT stop
     // it (egress keeps recording while anyone remains; it finalizes on its
     // own once the room empties). Local capture dies with the tab, so stop it.
@@ -399,6 +410,7 @@ export function useCallRoom(
     setQuality({});
     setCaptionsEnabled(false);
     await leaveRoom({ code, clientId });
+    setJoined(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, clientId, leaveRoom, setRecordingState, recordingState?.mode]);
 
@@ -506,6 +518,8 @@ export function useCallRoom(
     if (!signals) return;
     for (const sig of signals) {
       if (processedRef.current.has(sig._id)) continue;
+      // Ignore signals from before this session joined (stale from previous mount)
+      if (joinTimestampRef.current > 0 && sig.createdAt < joinTimestampRef.current) continue;
       processedRef.current.add(sig._id);
       void handleSignal(sig);
     }
@@ -713,7 +727,11 @@ export function useCallRoom(
         lkRoomRef.current = null;
         lkPublishedRef.current = {};
       }
-      if (joinedRef.current) void leaveRoom({ code, clientId });
+      // Clean up presence on the backend if leave() didn't already do it
+      // (e.g. browser tab closed, refresh, or route change without explicit leave).
+      if (joinedRef.current && !leftRef.current) {
+        void leaveRoom({ code, clientId });
+      }
       if (recordingState?.mode !== "cloud") {
         void setRecordingState({ code, clientId, state: { active: false } }).catch(() => {});
       }
@@ -818,6 +836,8 @@ export function useCallRoom(
     try {
       const res = await joinRoom({ code, clientId, name, userId, token });
       joinedRef.current = true;
+      leftRef.current = false;
+      joinTimestampRef.current = Date.now();
       setJoined(true);
       setJoinedAt(Date.now());
       setJoinError(null);

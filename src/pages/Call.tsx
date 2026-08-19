@@ -86,7 +86,7 @@ import { AgendaPanel } from "@/components/AgendaPanel";
 import { BreakoutsPanel } from "@/components/BreakoutsPanel";
 import { WhiteboardOverlay } from "@/components/WhiteboardOverlay";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
