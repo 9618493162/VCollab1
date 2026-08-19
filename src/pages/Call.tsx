@@ -90,7 +90,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "👏", "🎉", "😮", "🙌"];
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "👏", "🎉", "😮", "😢", "🔥", "🚀", "💯"];
 
 function extractCode(raw: string): string {
   const match = raw
@@ -311,13 +311,15 @@ export default function Call() {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<"gallery" | "speaker" | "focus">("gallery");
   const [showReactions, setShowReactions] = useState(false);
-  const [burst, setBurst] = useState<{ id: number; emoji: string; name: string }[]>([]);
+  const [burst, setBurst] = useState<{ id: number; emoji: string; name: string; x: number }[]>([]);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number }>({ x: 16, y: 16 });
   const [selfMinimized, setSelfMinimized] = useState(false);
   const [selfSize] = useState<{ w: number; h: number }>({ w: 208, h: 117 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const reduceMotion = useReducedMotion();
   const burstId = useRef(0);
+  const lastReactionCount = useRef(0);
+  const reactionRateRef = useRef<number[]>([]);
 
   const call = useCallRoom(
     code,
@@ -398,16 +400,24 @@ export default function Call() {
   const isMissing = room !== undefined && room === null;
   const isChecking = room === undefined;
 
-  // reaction bursts (ours + anyone else's in the room)
+  // reaction bursts — only animate NEW reactions (not all of them each time)
   useEffect(() => {
     if (!call.reactions) return;
-    for (const r of call.reactions) {
+    const len = call.reactions.length;
+    if (len <= lastReactionCount.current) {
+      lastReactionCount.current = len;
+      return;
+    }
+    const newReactions = call.reactions.slice(lastReactionCount.current);
+    lastReactionCount.current = len;
+    for (const r of newReactions) {
       burstId.current += 1;
       const id = burstId.current;
-      setBurst((prev) => [...prev.slice(-14), { id, emoji: r.emoji, name: r.name }]);
+      const xPos = -60 + Math.random() * 120;
+      setBurst((prev) => [...prev.slice(-18), { id, emoji: r.emoji, name: r.name, x: xPos }]);
       window.setTimeout(() => {
         setBurst((prev) => prev.filter((b) => b.id !== id));
-      }, 2600);
+      }, 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call.reactions?.length]);
@@ -669,6 +679,20 @@ export default function Call() {
   );
 
   const fireBurst = (emoji: string) => {
+    // client-side rate limit: max 5 reactions per second
+    const now = Date.now();
+    reactionRateRef.current = reactionRateRef.current.filter((t) => now - t < 1000);
+    if (reactionRateRef.current.length >= 5) return;
+    reactionRateRef.current.push(now);
+    // optimistic local display — show immediately
+    burstId.current += 1;
+    const id = burstId.current;
+    const xPos = -60 + Math.random() * 120;
+    setBurst((prev) => [...prev.slice(-18), { id, emoji, name: displayName, x: xPos }]);
+    window.setTimeout(() => {
+      setBurst((prev) => prev.filter((b) => b.id !== id));
+    }, 3000);
+    // send to other participants via Convex
     call.fireReaction(emoji);
     setShowReactions(false);
   };
@@ -1253,10 +1277,10 @@ export default function Call() {
                 {burst.map((b) => (
                   <motion.div
                     key={b.id}
-                    initial={{ opacity: 0, y: 40, scale: 0.6 }}
-                    animate={{ opacity: 1, y: -40, scale: 1.15 }}
-                    exit={{ opacity: 0, y: -140, scale: 1.4 }}
-                    transition={{ duration: 1.1, ease: "easeOut" }}
+                    initial={{ opacity: 0, y: 60, scale: 0.5 }}
+                    animate={{ opacity: [0, 1, 1, 0], y: [60, 10, -20, -80], scale: [0.5, 1.2, 1.1, 0.8] }}
+                    transition={{ duration: 2.5, ease: "easeOut", times: [0, 0.15, 0.6, 1] }}
+                    style={{ left: `calc(50% + ${b.x}px)` }}
                     className="absolute text-5xl drop-shadow-lg"
                   >
                     {b.emoji}
@@ -1395,18 +1419,22 @@ export default function Call() {
                 <Sparkles className="size-5" />
               </ControlButton>
               {showReactions && (
-                <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-border/60 bg-background/90 p-2 shadow-2xl backdrop-blur-2xl">
-                  {REACTION_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => fireBurst(emoji)}
-                      className="flex size-9 items-center justify-center rounded-xl text-xl transition-all hover:scale-125 hover:bg-muted"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  {/* backdrop to close on outside click */}
+                  <div className="fixed inset-0 z-20" onClick={() => setShowReactions(false)} />
+                  <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-2xl border border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl max-w-[280px] sm:max-w-none">
+                    {REACTION_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => fireBurst(emoji)}
+                        className="flex size-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-125 hover:bg-muted active:scale-90"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
