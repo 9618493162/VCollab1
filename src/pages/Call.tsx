@@ -94,10 +94,12 @@ import { toast } from "sonner";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "👏", "🎉", "😮", "😢", "🔥", "🚀", "💯"];
 
 function extractCode(raw: string): string {
+  // Match both new VC-XXXXXX format and legacy abc-defg-hij format.
+  // The backend normalizeCode() handles canonical conversion.
   const match = raw
     .toLowerCase()
-    .match(/([a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3})/);
-  return match?.[1] ?? "";
+    .match(/([a-z0-9]{2,3}-[a-z0-9]{3,6}(?:-[a-z0-9]{0,3})?)/);
+  return match?.[1] ?? raw.toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
 
 function useElapsed(start: number | null) {

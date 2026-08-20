@@ -32,8 +32,9 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 function extractCode(raw: string): string {
-  const match = raw.toLowerCase().match(/([a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3})/);
-  return match?.[1] ?? "";
+  // Match both new VC-XXXXXX format and legacy abc-defg-hij format.
+  const match = raw.toLowerCase().match(/([a-z0-9]{2,3}-[a-z0-9]{3,6}(?:-[a-z0-9]{0,3})?)/);
+  return match?.[1] ?? raw.toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
 
 /** Global ⌘K / Ctrl+K command palette. Mounted once, inside the router. */
@@ -123,7 +124,7 @@ export function CommandPalette() {
               autoFocus
               value={joinCode}
               onValueChange={setJoinCode}
-              placeholder="Enter a meeting code… e.g. abc-defg-hij"
+              placeholder="Enter a meeting code… e.g. VC-7K4P9X"
             />
           </form>
           <CommandList>
