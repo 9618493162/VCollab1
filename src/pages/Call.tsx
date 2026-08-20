@@ -37,6 +37,7 @@ import {
   Minimize2,
   MonitorUp,
   MoreVertical,
+  Speaker,
   Pause,
   PenLine,
   PhoneOff,
@@ -313,6 +314,7 @@ export default function Call() {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<"gallery" | "speaker" | "focus">("gallery");
   const [showReactions, setShowReactions] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [burst, setBurst] = useState<{ id: number; emoji: string; name: string; x: number }[]>([]);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number }>({ x: 16, y: 16 });
   const [selfMinimized, setSelfMinimized] = useState(false);
@@ -1405,6 +1407,21 @@ export default function Call() {
               {call.camOn ? <Video className="size-5" /> : <VideoOff className="size-5" />}
             </ControlButton>
 
+            {/* Speaker/Devices — mobile only */}
+            <div className="flex sm:hidden">
+              <ControlButton
+                active={panel === "devices"}
+                activeClass="bg-foreground text-background"
+                inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
+                onClick={() => setPanel((p) => (p === "devices" ? "none" : "devices"))}
+                label="Speaker & devices"
+              >
+                <Speaker className="size-5" />
+              </ControlButton>
+            </div>
+
+            {/* Desktop-only buttons: Screen Share, Hand, Reactions, Captions, Recording, AI, Chat */}
+            <div className="hidden sm:flex items-center gap-1 sm:gap-2">
             <ControlButton
               active={call.sharing}
               activeClass="bg-foreground text-background"
@@ -1550,6 +1567,20 @@ export default function Call() {
             >
               <MessageSquare className="size-5" />
             </ControlButton>
+            </div>{/* end desktop-only buttons */}
+
+            {/* More menu — mobile only */}
+            <div className="flex sm:hidden">
+              <ControlButton
+                active={showMobileMenu}
+                activeClass="bg-foreground text-background"
+                inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
+                onClick={() => setShowMobileMenu((v) => !v)}
+                label="More options"
+              >
+                <MoreVertical className="size-5" />
+              </ControlButton>
+            </div>
 
             {isHost && (
               <div className="ml-1 flex items-center gap-1.5 border-l border-border/60 pl-2">
@@ -1585,6 +1616,91 @@ export default function Call() {
             </Button>
           )}
           </footer>
+
+          {/* ---------- mobile more menu overlay ---------- */}
+          {showMobileMenu && (
+            <div className="fixed inset-0 z-50 sm:hidden">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMobileMenu(false)} />
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                className="absolute inset-x-0 bottom-0 z-10 rounded-t-2xl border-t border-border/60 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-2xl"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">More</p>
+                  <button type="button" onClick={() => setShowMobileMenu(false)} className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <X className="size-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <button type="button" onClick={() => { void call.toggleShare(); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className={cn("flex size-10 items-center justify-center rounded-full", call.sharing ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><MonitorUp className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Share</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowReactions(true); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Sparkles className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">React</span>
+                  </button>
+                  <button type="button" onClick={() => { call.toggleHand(); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className={cn("flex size-10 items-center justify-center rounded-full", call.handRaised ? "bg-amber-400 text-black" : "bg-foreground/10 text-foreground")}><Hand className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Hand</span>
+                  </button>
+                  <button type="button" onClick={() => { call.toggleCaptions(); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className={cn("flex size-10 items-center justify-center rounded-full", call.captionsEnabled ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><Captions className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Captions</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "chat" ? "none" : "chat")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className={cn("flex size-10 items-center justify-center rounded-full", panel === "chat" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><MessageSquare className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Chat</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "ai" ? "none" : "ai")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className={cn("flex size-10 items-center justify-center rounded-full", panel === "ai" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><Bot className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">AI</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "people" ? "none" : "people")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className={cn("flex size-10 items-center justify-center rounded-full", panel === "people" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><Users className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">People</span>
+                  </button>
+                  {isModerator && (
+                    <button type="button" onClick={() => { if (call.recordingState?.active === true) { if (call.isRecordingStarter) setConfirmStop(true); } else { void call.startRecording(); } setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                      <div className={cn("flex size-10 items-center justify-center rounded-full", call.recordingState?.active ? "bg-red-500 text-white" : "bg-foreground/10 text-foreground")}><Radio className="size-5" /></div>
+                      <span className="text-[10px] text-muted-foreground">Record</span>
+                    </button>
+                  )}
+                  <button type="button" onClick={() => { setPanel((p) => (p === "notes" ? "none" : "notes")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><PenLine className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Notes</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "polls" ? "none" : "polls")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><BarChart3 className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Polls</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "qa" ? "none" : "qa")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><MessagesSquare className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Q&A</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "agenda" ? "none" : "agenda")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><ClipboardList className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Agenda</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "whiteboard" ? "none" : "whiteboard")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><LayoutGrid className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Board</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowInfo(true); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Info className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Info</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowShortcuts(true); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Keyboard className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Keys</span>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
 
           {/* ---------- host leave dialog: Transfer & Leave / End / Cancel ---------- */}
           <AlertDialog open={confirmEnd} onOpenChange={(open) => { setConfirmEnd(open); if (!open) { setHostLeaveMode(false); setTransferTarget(null); } }}>
