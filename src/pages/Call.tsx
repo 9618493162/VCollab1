@@ -1108,8 +1108,12 @@ export default function Call() {
           {/* ---------- stage ---------- */}
           <main className="call-page-main relative z-10 min-h-0 p-3 sm:p-4">
             {isMissing ? (
-              <div className="flex h-full flex-col items-center justify-center text-center">
-                <p className="text-sm text-muted-foreground">This meeting doesn't exist (yet).</p>
+              <div className="flex h-full flex-col items-center justify-center text-center px-4">
+                <div className="flex size-14 items-center justify-center rounded-2xl border border-border/40 bg-muted/40 mb-4">
+                  <Ban className="size-6 text-muted-foreground/60" />
+                </div>
+                <p className="text-sm font-medium text-foreground">Meeting not found</p>
+                <p className="mt-1 text-xs text-muted-foreground/60">This meeting doesn't exist or hasn't been created yet.</p>
                 <Button
                   variant="outline"
                   className="mt-6 rounded-full border-border text-foreground hover:bg-muted"
@@ -1140,12 +1144,16 @@ export default function Call() {
                     </div>
                   </>
                 ) : (
-                  <>
-                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                    <p className="mt-3 text-sm text-muted-foreground">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative">
+                      <Loader2 className="size-8 animate-spin text-primary/60" />
+                      <div className="absolute inset-0 size-8 rounded-full border border-primary/20" />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">
                       Connecting to meeting…
                     </p>
-                  </>
+                    <p className="text-xs text-muted-foreground/60">Setting up your connection</p>
+                  </div>
                 )}
               </div>
             ) : view === "focus" && activeSpeakerId ? (
@@ -1162,12 +1170,19 @@ export default function Call() {
             ) : (
               <div
                 className={cn(
-                  "grid h-full w-full content-center justify-items-center gap-3 overflow-y-auto sm:gap-4",
-                  Object.keys(call.remoteStreams).length === 0
-                    ? "grid-cols-1"
-                    : view === "speaker" && activeSpeakerId
-                      ? "grid-cols-1 lg:grid-cols-2"
-                      : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+                  "grid h-full w-full content-center justify-items-center gap-2 p-2 overflow-y-auto sm:gap-3 sm:p-3",
+                  (() => {
+                    const remoteCount = Object.keys(call.remoteStreams).length;
+                    const totalTiles = remoteCount + (view === "gallery" ? 1 : 0);
+                    const hasPresenter = call.participants?.some((p) => p.sharing);
+                    if (hasPresenter) return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
+                    if (totalTiles <= 1) return "grid-cols-1 max-w-3xl mx-auto";
+                    if (totalTiles === 2) return "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto";
+                    if (totalTiles <= 4) return "grid-cols-2 max-w-5xl mx-auto";
+                    if (totalTiles <= 6) return "grid-cols-2 sm:grid-cols-3 max-w-6xl mx-auto";
+                    if (totalTiles <= 9) return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 max-w-6xl mx-auto";
+                    return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
+                  })(),
                 )}
               >
                 {/* self tile (gallery) */}
@@ -1216,26 +1231,49 @@ export default function Call() {
                       className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl bg-muted/60 ring-1 ring-black/10 dark:ring-white/10"
                     >
                       <Avatar name={p.name} />
-                      <span className="absolute bottom-2.5 left-3 rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
-                        {p.name} · joining…
-                      </span>
                       {p.handRaised && (
-                        <span className="absolute right-2.5 top-2.5 flex size-6 items-center justify-center rounded-full bg-amber-400 text-sm shadow-lg">
+                        <span className="absolute left-2.5 top-2.5 flex size-7 items-center justify-center rounded-full bg-amber-400 text-sm shadow-lg animate-bounce">
                           ✋
                         </span>
                       )}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent pt-8 pb-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="size-3 animate-spin text-white/70" />
+                          <span className="text-xs font-medium text-white/80">
+                            {p.name} joining…
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ))}
 
                 {Object.keys(call.remoteStreams).length === 0 &&
                   call.participants?.length === 1 && (
-                    <div className="col-span-full flex h-full min-h-[300px] flex-col items-center justify-center text-center px-4">
-                      <p className="text-lg font-extralight text-muted-foreground">
-                        You're the first one here.
+                    <div className="col-span-full flex flex-col items-center justify-center text-center px-4 py-8">
+                      <div className="flex size-16 items-center justify-center rounded-2xl border border-border/40 bg-muted/40 mb-4">
+                        <Users className="size-7 text-muted-foreground/50" />
+                      </div>
+                      <p className="text-base font-medium text-muted-foreground">
+                        Waiting for others to join
                       </p>
-                      <p className="mt-2 max-w-sm text-sm text-muted-foreground/70">
-                        Share the code to bring people in.
+                      <p className="mt-1.5 max-w-sm text-sm text-muted-foreground/60">
+                        Share the meeting code with participants to get started.
                       </p>
+                      <div className="mt-4 flex items-center gap-2">
+                        <span className="font-mono text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-1.5">{code}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full h-8"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(code);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                        >
+                          {copied ? <CheckCheck className="size-3.5" /> : <Copy className="size-3.5" />}
+                        </Button>
+                      </div>
                     </div>
                   )}
               </div>
@@ -1644,6 +1682,18 @@ export default function Call() {
                     <X className="size-4" />
                   </button>
                 </div>
+                {/* Meeting code quick copy */}
+                <button
+                  type="button"
+                  onClick={() => { void handleCopy(); }}
+                  className="mb-3 flex w-full items-center justify-between rounded-xl border border-border/60 bg-muted/50 px-3 py-2.5 transition-colors hover:bg-muted"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm text-foreground">{code}</span>
+                    <span className="text-[10px] text-muted-foreground">meeting code</span>
+                  </div>
+                  {copied ? <CheckCheck className="size-4 text-emerald-500" /> : <Copy className="size-4 text-muted-foreground" />}
+                </button>
                 <div className="grid grid-cols-4 gap-2">
                   <button type="button" onClick={() => { void call.toggleShare(); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
                     <div className={cn("flex size-10 items-center justify-center rounded-full", call.sharing ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><MonitorUp className="size-5" /></div>
@@ -2265,17 +2315,32 @@ function SelfTile({
   peerId: string;
 }) {
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-muted/70 ring-1 ring-black/10 dark:ring-white/10 shadow-lg shadow-black/10 dark:shadow-black/25">
+    <div className="group relative aspect-video w-full overflow-hidden rounded-2xl bg-muted/70 ring-1 ring-black/10 dark:ring-white/10 shadow-lg shadow-black/10 dark:shadow-black/25 transition-shadow hover:shadow-xl">
       {stream ? <VideoSurface stream={stream} peer={peerId} /> : <Avatar name={name} />}
-      <div className="absolute bottom-2.5 left-3 flex items-center gap-2">
-        <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
-          {name} {sharing ? "· presenting" : "(you)"}
-        </span>
-        {!micOn && (
-          <span className="rounded-lg bg-red-500/80 p-1 backdrop-blur-sm">
-            <MicOff className="size-3" />
-          </span>
-        )}
+      {/* Bottom info bar */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pt-8 pb-2.5 px-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-white drop-shadow-md">
+              {name}
+            </span>
+            {sharing && (
+              <span className="flex items-center gap-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+                <MonitorUp className="size-3" /> presenting
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {!micOn && (
+              <span className="rounded-md bg-red-500/80 p-1 backdrop-blur-sm">
+                <MicOff className="size-3 text-white" />
+              </span>
+            )}
+            <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur-sm">
+              You
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2306,8 +2371,10 @@ function Tile({
     <div
       key={peerId}
       className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-2xl bg-muted/70 shadow-lg shadow-black/10 dark:shadow-black/25",
-        speaking ? "ring-2 ring-primary speaking-ring" : "ring-1 ring-black/10 dark:ring-white/10",
+        "group relative aspect-video w-full overflow-hidden rounded-2xl bg-muted/70 shadow-lg shadow-black/10 dark:shadow-black/25 transition-all duration-300",
+        speaking
+          ? "ring-2 ring-primary/80 shadow-primary/10 speaking-ring"
+          : "ring-1 ring-black/10 dark:ring-white/10 hover:ring-black/20 dark:hover:ring-white/20",
       )}
     >
       <RemoteAudioPlayer stream={stream} peer={peerId} />
@@ -2316,36 +2383,52 @@ function Tile({
       ) : (
         <VideoSurface stream={stream} peer={peerId} />
       )}
-      <div className="absolute bottom-2.5 left-3 flex items-center gap-1.5">
-        <span className="rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
-          {name}
-        </span>
-        {presenting && (
-          <span className="flex items-center gap-1 rounded-lg bg-black/45 px-2 py-0.5 text-xs backdrop-blur-md">
-            <MonitorUp className="size-3" /> presenting
-          </span>
-        )}
-        {micOff && (
-          <span className="rounded-lg bg-black/45 p-1 backdrop-blur-md">
-            <MicOff className="size-3" />
-          </span>
-        )}
-      </div>
-      <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
-        <QualityDot quality={quality} />
-        {handRaised && (
+
+      {/* Hand raised indicator (top-left) */}
+      {handRaised && (
+        <div className="absolute left-2.5 top-2.5 z-10">
           <span
-            className="flex size-6 items-center justify-center rounded-full bg-amber-400 text-sm shadow-lg"
+            className="flex size-7 items-center justify-center rounded-full bg-amber-400 text-sm shadow-lg animate-bounce"
             title="Hand raised"
           >
             ✋
           </span>
-        )}
-        {speaking && (
-          <span className="flex items-center gap-1 rounded-full bg-primary/80 px-2 py-0.5 text-[10px] font-medium text-white">
-            <Signal className="size-2.5" /> speaking
+        </div>
+      )}
+
+      {/* Connection quality (top-right) */}
+      <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5 z-10">
+        <QualityDot quality={quality} />
+        {presenting && (
+          <span className="flex items-center gap-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+            <MonitorUp className="size-3" /> presenting
           </span>
         )}
+      </div>
+
+      {/* Speaking indicator (top-center) */}
+      {speaking && (
+        <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2">
+          <span className="flex items-center gap-1 rounded-full bg-primary/80 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm shadow-lg">
+            <Signal className="size-2.5" /> speaking
+          </span>
+        </div>
+      )}
+
+      {/* Bottom info bar */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pt-8 pb-2.5 px-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-white drop-shadow-md">
+              {name}
+            </span>
+          </div>
+          {micOff && (
+            <span className="rounded-md bg-red-500/80 p-1 backdrop-blur-sm">
+              <MicOff className="size-3 text-white" />
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
