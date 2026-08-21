@@ -290,6 +290,7 @@ export default function Call() {
   );
   const [entered, setEntered] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [panel, setPanel] = useState<
     | "none"
     | "chat"
@@ -620,8 +621,15 @@ export default function Call() {
   };
 
   const handleLeave = async () => {
-    await call.leave();
-    navigate(isAuthenticated ? "/dashboard" : "/");
+    if (leaving) return;
+    setLeaving(true);
+    try {
+      await call.leave();
+      navigate(isAuthenticated ? "/dashboard" : "/");
+    } catch {
+      setLeaving(false);
+      toast.error("Failed to leave meeting. Please try again.");
+    }
   };
 
   const handleCopy = async () => {
@@ -639,11 +647,15 @@ export default function Call() {
 
   const handleEndForAll = async () => {
     setConfirmEnd(false);
+    if (leaving) return;
+    setLeaving(true);
     try {
       await endMeeting({ code });
       setMeetingEnded(true);
       await call.leave();
+      navigate(isAuthenticated ? "/dashboard" : "/");
     } catch (error) {
+      setLeaving(false);
       toast.error(error instanceof Error ? error.message : "Couldn't end the meeting.");
     }
   };
@@ -855,6 +867,24 @@ export default function Call() {
   }
 
   const goHome = () => navigate(isAuthenticated ? "/dashboard" : "/");
+
+  // ---- loading state: Convex is still fetching room data ----
+  if (room === undefined) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-background px-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="relative">
+            <Loader2 className="size-8 animate-spin text-primary/60" />
+            <div className="absolute inset-0 size-8 rounded-full border border-primary/20" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">Loading meeting...</p>
+            <p className="mt-1 text-xs text-muted-foreground/60">Verifying meeting code</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   // ---- terminal lifecycle states: backend status wins over any UI state ----
   if (room !== undefined && room !== null && room.expired === true) {
@@ -1749,10 +1779,11 @@ export default function Call() {
             ) : (
               <Button
                 onClick={handleLeave}
-                className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
+                disabled={leaving}
+                className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12 disabled:opacity-50"
                 aria-label="Leave meeting"
               >
-                <PhoneOff className="size-5" />
+                {leaving ? <Loader2 className="size-5 animate-spin" /> : <PhoneOff className="size-5" />}
               </Button>
             )}
             </div>
