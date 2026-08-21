@@ -1629,7 +1629,7 @@ export default function Call() {
                 animate={{ y: 0 }}
                 exit={{ y: "100%" }}
                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                className="absolute inset-x-0 bottom-0 z-10 rounded-t-2xl border-t border-border/60 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-2xl"
+                className="absolute inset-x-0 bottom-0 z-10 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border/60 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-2xl"
               >
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-sm font-semibold text-foreground">More</p>

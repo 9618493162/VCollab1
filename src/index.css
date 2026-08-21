@@ -390,10 +390,6 @@ body.meeting-active {
   }
 }
 
-/* Mobile keyboard: when a text input is focused, keep footer visible */
-/* The viewport-height unit (dvh) handles iOS Safari correctly */
-@supports (height: 100dvh) {
-  .call-page-main {
-    height: 100dvh;
-  }
-}
+/* Mobile keyboard: flex-1 + min-h-0 lets the footer stay pinned */
+/* The parent uses h-dvh (100dvh) so we do NOT set a fixed height here — */
+/* that would fight the flex layout and push the footer off-screen. */
