@@ -378,6 +378,22 @@ export default function Dashboard() {
                               >
                                 {m.code}
                               </Badge>
+                              {(() => {
+                                const now = Date.now();
+                                const start = m.startTime;
+                                const end = start + (m.durationMinutes ?? 30) * 60_000;
+                                if (now >= start && now <= end) {
+                                  return <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"><span className="mr-1 size-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</Badge>;
+                                }
+                                if (now < start) {
+                                  const diff = start - now;
+                                  const hours = Math.floor(diff / 3_600_000);
+                                  const mins = Math.floor((diff % 3_600_000) / 60_000);
+                                  const label = hours > 0 ? `in ${hours}h ${mins}m` : `in ${mins}m`;
+                                  return <Badge variant="outline" className="rounded-full border-border/60 text-muted-foreground">{label}</Badge>;
+                                }
+                                return null;
+                              })()}
                               {m.recurrence && (
                                 <Badge
                                   variant="outline"
@@ -584,39 +600,60 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <ul className="divide-y divide-border/60">
-                    {myRooms.slice(0, 5).map((room) => (
-                      <li
-                        key={room._id}
-                        className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">
-                            {room.title ?? "Untitled meeting"}
-                          </p>
-                          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                            {room.code}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-full"
-                            onClick={() => navigate(`/collab/${room.code}`)}
-                          >
-                            <ClipboardList className="mr-1.5 size-3.5" /> Notes
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full"
-                            onClick={() => navigate(`/call/${room.code}`)}
-                          >
-                            <Play className="mr-1.5 size-3.5" /> Join
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
+                    {myRooms.slice(0, 5).map((room) => {
+                      const duration = room.startedAt && room.endedAt
+                        ? Math.round((room.endedAt - room.startedAt) / 60_000)
+                        : null;
+                      const statusColor = room.status === "active"
+                        ? "bg-emerald-400"
+                        : room.status === "ended"
+                          ? "bg-muted-foreground/40"
+                          : "bg-amber-400";
+                      return (
+                        <li
+                          key={room._id}
+                          className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate font-medium">
+                                {room.title ?? "Untitled meeting"}
+                              </p>
+                              <span className={cn("size-2 rounded-full shrink-0", statusColor)} title={room.status ?? "unknown"} />
+                            </div>
+                            <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="font-mono">{room.code}</span>
+                              <span>·</span>
+                              <span>{room.startedAt ? new Date(room.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Not started"}</span>
+                              {duration !== null && duration > 0 && (
+                                <>
+                                  <span>·</span>
+                                  <span>{duration < 60 ? `${duration}m` : `${Math.floor(duration / 60)}h ${duration % 60}m`}</span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => navigate(`/collab/${room.code}`)}
+                            >
+                              <ClipboardList className="mr-1.5 size-3.5" /> Notes
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => navigate(`/call/${room.code}`)}
+                            >
+                              <Play className="mr-1.5 size-3.5" /> Join
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
