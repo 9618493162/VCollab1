@@ -319,12 +319,15 @@ export default function Call() {
   const [showReactions, setShowReactions] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [burst, setBurst] = useState<{ id: number; emoji: string; name: string; x: number }[]>([]);
+  const [unreadChat, setUnreadChat] = useState(0);
+  const lastMessageCountRef = useRef(0);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number }>({ x: 16, y: 16 });
   const [selfMinimized, setSelfMinimized] = useState(false);
   const [selfSize] = useState<{ w: number; h: number }>({ w: 208, h: 117 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const reduceMotion = useReducedMotion();
   const burstId = useRef(0);
+  const lastParticipantCountRef = useRef(0);
   const lastReactionCount = useRef(0);
   const reactionRateRef = useRef<number[]>([]);
 
@@ -430,6 +433,48 @@ export default function Call() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call.reactions?.length]);
 
+  // Track unread chat messages when chat panel is closed
+  useEffect(() => {
+    if (!call.messages) return;
+    const len = call.messages.length;
+    if (panel !== "chat" && len > lastMessageCountRef.current) {
+      setUnreadChat((prev) => prev + (len - lastMessageCountRef.current));
+    }
+    lastMessageCountRef.current = len;
+  }, [call.messages?.length, panel]);
+
+  // Clear unread when chat panel opens
+  useEffect(() => {
+    if (panel === "chat") setUnreadChat(0);
+  }, [panel]);
+
+  // Join/leave notifications
+  useEffect(() => {
+    if (!call.participants || !entered) return;
+    const prev = lastParticipantCountRef.current;
+    const curr = call.participants.length;
+    if (prev > 0 && curr > prev) {
+      const newPs = call.participants.filter(
+        (p) => p.clientId !== call.clientId && !p.waiting,
+      );
+      const newcomer = newPs[newPs.length - 1];
+      if (newcomer) toast.info(`${newcomer.name} joined the meeting`);
+    } else if (prev > 0 && curr < prev) {
+      toast.info("A participant left the meeting");
+    }
+    lastParticipantCountRef.current = curr;
+  }, [call.participants?.length, entered]);
+
+  // Hand raised notifications
+  useEffect(() => {
+    if (!call.participants) return;
+    const raised = call.participants.filter((p) => p.handRaised && p.clientId !== call.clientId);
+    if (raised.length > 0) {
+      const name = raised[raised.length - 1].name;
+      toast(`${name} raised their hand`, { icon: "✋" });
+    }
+  }, [call.participants?.filter((p) => p.handRaised)?.length]);
+
   // kicked / ended by host → leave the room
   useEffect(() => {
     if (call.kicked) {
@@ -516,6 +561,48 @@ export default function Call() {
       if (translateTimerRef.current) window.clearTimeout(translateTimerRef.current);
     };
   }, [call.captions, translateTo, translateText]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts while typing in inputs
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+
+      switch (e.key.toLowerCase()) {
+        case "m":
+          e.preventDefault();
+          call.toggleMic();
+          break;
+        case "v":
+          e.preventDefault();
+          call.toggleCam();
+          break;
+        case "c":
+          e.preventDefault();
+          setPanel((p) => (p === "chat" ? "none" : "chat"));
+          break;
+        case "p":
+          e.preventDefault();
+          setPanel((p) => (p === "people" ? "none" : "people"));
+          break;
+        case "r":
+          e.preventDefault();
+          setShowReactions((v) => !v);
+          break;
+        case "escape":
+          e.preventDefault();
+          if (showReactions) setShowReactions(false);
+          else if (showMobileMenu) setShowMobileMenu(false);
+          else if (panel !== "none") setPanel("none");
+          else if (showShortcuts) setShowShortcuts(false);
+          else if (showInfo) setShowInfo(false);
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [call.toggleMic, call.toggleCam, panel, showReactions, showMobileMenu, showShortcuts, showInfo]);
 
   const handleJoin = async () => {
     if (!displayName.trim()) {
@@ -1613,7 +1700,14 @@ export default function Call() {
               onClick={() => setPanel((p) => (p === "chat" ? "none" : "chat"))}
               label="Chat"
             >
-              <MessageSquare className="size-5" />
+              <div className="relative">
+                <MessageSquare className="size-5" />
+                {unreadChat > 0 && panel !== "chat" && (
+                  <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                    {unreadChat > 9 ? "9+" : unreadChat}
+                  </span>
+                )}
+              </div>
             </ControlButton>
             </div>{/* end desktop-only buttons */}
             <div className="flex sm:hidden">
@@ -1712,7 +1806,7 @@ export default function Call() {
                     <span className="text-[10px] text-muted-foreground">Captions</span>
                   </button>
                   <button type="button" onClick={() => { setPanel((p) => (p === "chat" ? "none" : "chat")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
-                    <div className={cn("flex size-10 items-center justify-center rounded-full", panel === "chat" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><MessageSquare className="size-5" /></div>
+                    <div className="relative"><div className={cn("flex size-10 items-center justify-center rounded-full", panel === "chat" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><MessageSquare className="size-5" /></div>{unreadChat > 0 && panel !== "chat" && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">{unreadChat > 9 ? "9+" : unreadChat}</span>}</div>
                     <span className="text-[10px] text-muted-foreground">Chat</span>
                   </button>
                   <button type="button" onClick={() => { setPanel((p) => (p === "ai" ? "none" : "ai")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
@@ -2484,9 +2578,16 @@ function ChatPanel({
   }, [call.messages?.length]);
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-40 flex h-full w-full flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl">
+    <aside className="absolute inset-y-0 right-0 z-40 flex h-full w-full flex-col border-l border-border/60 bg-background/90 backdrop-blur-2xl sm:w-80">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
-        <p className="text-sm font-medium">Chat</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium">Chat</p>
+          {call.messages && call.messages.length > 0 && (
+            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+              {call.messages.length}
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -2496,24 +2597,45 @@ function ChatPanel({
           <X className="size-4" />
         </button>
       </div>
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="flex-1 space-y-1 overflow-y-auto p-3">
         {call.messages?.length === 0 && (
-          <p className="pt-8 text-center text-sm text-muted-foreground/70">
-            No messages yet. Say hi.
-          </p>
-        )}
-        {call.messages?.map((msg) => (
-          <div key={msg._id}>
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{msg.name}</span> ·{" "}
-              {new Date(msg.createdAt).toLocaleTimeString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </p>
-            <p className="mt-0.5 text-sm text-foreground">{msg.text}</p>
+          <div className="flex flex-col items-center justify-center pt-12 text-center">
+            <div className="flex size-12 items-center justify-center rounded-2xl border border-border/40 bg-muted/40 mb-3">
+              <MessageSquare className="size-5 text-muted-foreground/50" />
+            </div>
+            <p className="text-sm font-medium text-muted-foreground">No messages yet</p>
+            <p className="mt-1 text-xs text-muted-foreground/60">Send a message to get the conversation started.</p>
           </div>
-        ))}
+        )}
+        {call.messages?.map((msg, i) => {
+          const isMe = msg.from === call.clientId;
+          const showHeader = i === 0 || call.messages?.[i - 1]?.from !== msg.from;
+          return (
+            <div key={msg._id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
+              {showHeader && (
+                <p className={cn("mb-0.5 flex items-center gap-1.5 text-[11px]", isMe ? "text-primary/70" : "text-muted-foreground")}>
+                  <span className="font-medium">{isMe ? "You" : msg.name}</span>
+                  <span className="tabular-nums text-muted-foreground/50">
+                    {new Date(msg.createdAt).toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </p>
+              )}
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
+                  isMe
+                    ? "bg-primary text-primary-foreground rounded-br-md"
+                    : "bg-muted text-foreground rounded-bl-md",
+                )}
+              >
+                {msg.text}
+              </div>
+            </div>
+          );
+        })}
         <div ref={endRef} />
       </div>
       <form
@@ -2528,14 +2650,15 @@ function ChatPanel({
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Send a message"
+          placeholder="Type a message..."
           className="h-10 flex-1 rounded-full border-border/60 bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground"
         />
         <Button
           type="submit"
           variant="outline"
           size="icon"
-          className="h-10 w-10 shrink-0 rounded-full border-border/60 text-foreground hover:bg-muted"
+          disabled={!draft.trim()}
+          className="h-10 w-10 shrink-0 rounded-full border-border/60 text-foreground hover:bg-muted disabled:opacity-40"
           aria-label="Send message"
         >
           <Send className="size-4" />
