@@ -310,7 +310,6 @@ export default function Call() {
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [hostLeaveMode, setHostLeaveMode] = useState<false | "pick-transfer" | false>(false);
-  const [transferTarget, setTransferTarget] = useState<Id<"users"> | null>(null);
   const [meetingEnded, setMeetingEnded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -328,6 +327,7 @@ export default function Call() {
   const reduceMotion = useReducedMotion();
   const burstId = useRef(0);
   const lastParticipantCountRef = useRef(0);
+  const [transferTarget, setTransferTarget] = useState<{ clientId: string; name: string; userId?: Id<"users"> } | null>(null);
   const lastReactionCount = useRef(0);
   const reactionRateRef = useRef<number[]>([]);
 
@@ -667,12 +667,12 @@ export default function Call() {
   };
 
   const handleTransferAndLeave = async () => {
-    if (!transferTarget) {
+    if (!transferTarget?.userId) {
       toast.error("Select a participant to transfer host to.");
       return;
     }
     try {
-      await transferAndLeave({ code, targetUserId: transferTarget, clientId: call.clientId });
+      await transferAndLeave({ code, targetUserId: transferTarget.userId, clientId: call.clientId });
       toast.success("Host transferred. Leaving meeting…");
       await call.leave();
       navigate(isAuthenticated ? "/dashboard" : "/");
@@ -1814,7 +1814,7 @@ export default function Call() {
                     <span className="text-[10px] text-muted-foreground">AI</span>
                   </button>
                   <button type="button" onClick={() => { setPanel((p) => (p === "people" ? "none" : "people")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
-                    <div className={cn("flex size-10 items-center justify-center rounded-full", panel === "people" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><Users className="size-5" /></div>
+                    <div className="relative"><div className={cn("flex size-10 items-center justify-center rounded-full", panel === "people" ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><Users className="size-5" /></div>{(call.participants?.length ?? 0) > 1 && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">{call.participants?.length}</span>}</div>
                     <span className="text-[10px] text-muted-foreground">People</span>
                   </button>
                   {isModerator && (
@@ -1856,6 +1856,33 @@ export default function Call() {
             </div>
           )}
           </AnimatePresence>
+
+          {/* ---------- host transfer confirmation ---------- */}
+          <AlertDialog open={!!transferTarget} onOpenChange={(open) => { if (!open) setTransferTarget(null); }}>
+            <AlertDialogContent className="border-border/60 sm:max-w-md">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Transfer host role</AlertDialogTitle>
+                <AlertDialogDescription className="text-muted-foreground">
+                  Transfer host to <span className="font-medium text-foreground">{transferTarget?.name}</span>? They will be able to manage the meeting, admit participants, and control settings.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-full">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="rounded-full"
+                  onClick={() => {
+                    if (transferTarget?.userId) {
+                      void handleTransferHost(transferTarget.userId);
+                      toast.success(`Host transferred to ${transferTarget.name}`);
+                    }
+                    setTransferTarget(null);
+                  }}
+                >
+                  <Crown className="mr-1.5 size-3.5" /> Transfer
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* ---------- host leave dialog: Transfer & Leave / End / Cancel ---------- */}
           <AlertDialog open={confirmEnd} onOpenChange={(open) => { setConfirmEnd(open); if (!open) { setHostLeaveMode(false); setTransferTarget(null); } }}>
@@ -1920,9 +1947,9 @@ export default function Call() {
                       <button
                         key={p.clientId}
                         type="button"
-                        onClick={() => setTransferTarget(p.userId!)}
+                        onClick={() => setTransferTarget({ clientId: p.clientId, name: p.name, userId: p.userId })}
                         className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                          transferTarget === p.userId
+                          transferTarget?.userId === p.userId
                             ? "bg-primary/10 ring-1 ring-primary/50"
                             : "hover:bg-muted"
                         }`}
@@ -1936,7 +1963,7 @@ export default function Call() {
                             <p className="text-[10px] text-muted-foreground">you</p>
                           )}
                         </div>
-                        {transferTarget === p.userId && (
+                        {transferTarget?.userId === p.userId && (
                           <Check className="size-4 text-primary" />
                         )}
                       </button>
@@ -1951,7 +1978,7 @@ export default function Call() {
                     </Button>
                     <Button
                       className="rounded-full"
-                      disabled={!transferTarget}
+                      disabled={!transferTarget?.userId}
                       onClick={() => void handleTransferAndLeave()}
                     >
                       Transfer & Leave
@@ -2011,6 +2038,7 @@ export default function Call() {
                     )
                   }
                   onTransferHost={(userId) => void handleTransferHost(userId)}
+                  onSetTransferTarget={setTransferTarget}
                   onMuteAll={() => void handleMuteAll()}
                   onClose={() => setPanel("none")}
                 />
@@ -2683,6 +2711,7 @@ function PeoplePanel({
   onMakeCoHost,
   onTransferHost,
   onMuteAll,
+  onSetTransferTarget,
   onClose,
 }: {
   code: string;
@@ -2697,6 +2726,7 @@ function PeoplePanel({
   onMakeCoHost: (clientId: string) => void;
   onTransferHost: (userId: Id<"users">) => void;
   onMuteAll: () => void;
+  onSetTransferTarget: (target: { clientId: string; name: string; userId?: Id<"users"> } | null) => void;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -2812,9 +2842,13 @@ function PeoplePanel({
 
       <div className="flex-1 overflow-y-auto p-2">
         {list.length === 0 && (
-          <p className="pt-8 text-center text-sm text-muted-foreground/70">
-            {search ? "No matches." : "Nobody else here yet."}
-          </p>
+          <div className="flex flex-col items-center justify-center pt-12 text-center">
+            <div className="flex size-12 items-center justify-center rounded-2xl border border-border/40 bg-muted/40 mb-3">
+              <Users className="size-5 text-muted-foreground/50" />
+            </div>
+            <p className="text-sm font-medium text-muted-foreground">{search ? "No matches" : "Nobody else here yet"}</p>
+            <p className="mt-1 text-xs text-muted-foreground/60">{search ? "Try a different search" : "Participants will appear here"}</p>
+          </div>
         )}
         {list.map((p) => {
           const self = p.clientId === call.clientId;
@@ -2896,10 +2930,21 @@ function PeoplePanel({
                     <UserPlus className="size-3.5" />
                   </button>
                 )}
-                {isHost && !self && p.userId && (
+                {isHost && !self && coHostIds.has(p.clientId) && (
                   <button
                     type="button"
-                    onClick={() => onTransferHost(p.userId!)}
+                    onClick={() => onMakeCoHost(p.clientId)}
+                    title="Remove co-host"
+                    aria-label="Remove co-host"
+                    className="flex size-7 items-center justify-center rounded-full text-indigo-600/70 dark:text-indigo-400/70 transition-colors hover:bg-red-500/20 hover:text-red-500 dark:hover:text-red-400"
+                  >
+                    <BadgeCheck className="size-3.5" />
+                  </button>
+                )}
+                {isHost && !self && p.userId && !coHostIds.has(p.clientId) && (
+                  <button
+                    type="button"
+                    onClick={() => onSetTransferTarget({ clientId: p.clientId, name: p.name, userId: p.userId })}
                     title="Transfer host"
                     aria-label="Transfer host"
                     className="flex size-7 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-amber-500/20 hover:text-amber-600 dark:hover:text-amber-300"
