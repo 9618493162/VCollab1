@@ -137,9 +137,15 @@ export default function Dashboard() {
     const meetingsToday = rooms.filter(
       (r) => (r.startedAt ?? r.createdAt) >= today,
     ).length;
-    const hours = rooms.reduce((acc, r) => {
-      if (r.startedAt && r.endedAt) return acc + (r.endedAt - r.startedAt) / 3_600_000;
-      return acc;
+    // Only count rooms that were actually ended by a user (not auto-expired).
+    // Auto-expired rooms inflate the hours stat because the TTL is 24h.
+    const endedRooms = rooms.filter(
+      (r) => r.status === "ended" && r.startedAt && r.endedAt,
+    );
+    const hours = endedRooms.reduce((acc, r) => {
+      const durationH = (r.endedAt! - r.startedAt!) / 3_600_000;
+      // Guard against absurdly long durations (>24h is a TTL expiry, not a real meeting)
+      return acc + (durationH > 0 && durationH <= 24 ? durationH : 0);
     }, 0);
     return {
       meetings: rooms.length,
