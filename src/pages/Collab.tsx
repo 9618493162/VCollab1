@@ -56,10 +56,15 @@ const PRIORITY_STYLES: Record<string, string> = {
 };
 
 function extractCode(raw: string): string {
-  const match = raw
-    .toLowerCase()
-    .match(/([a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3})/);
-  return match?.[1] ?? "";
+  const flat = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // New format: VC-XXXXXX (8 chars, starts with vc)
+  if (flat.length >= 8 && flat.startsWith("vc")) {
+    const body = flat.slice(2, 8).toUpperCase();
+    if (body.length === 6) return `vc-${body}`;
+  }
+  // Legacy format: abc-defg-hij (10 chars)
+  const match = raw.toLowerCase().match(/([a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3})/);
+  return match?.[1] ?? (flat.length >= 10 ? flat.slice(0, 10) : "");
 }
 
 type Card = {
