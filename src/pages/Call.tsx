@@ -8,7 +8,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { FluidPanel } from "@/components/ui/fluid";
 import {
-  BadgeCheck,
+  AlertCircle, BadgeCheck, CheckCircle2,
   Ban,
   BarChart3,
   Bot,
@@ -289,6 +289,7 @@ export default function Call() {
     user?.name?.split(" ")[0] ?? "You",
   );
   const [entered, setEntered] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [panel, setPanel] = useState<
     | "none"
     | "chat"
@@ -516,13 +517,19 @@ export default function Call() {
     };
   }, [call.captions, translateTo, translateText]);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!displayName.trim()) {
       toast.error("Tell people your name first.");
       return;
     }
-    void call.join();
-    setEntered(true);
+    if (joining) return;
+    setJoining(true);
+    try {
+      await call.join();
+      setEntered(true);
+    } catch {
+      setJoining(false);
+    }
   };
 
   const handleLeave = async () => {
@@ -2002,10 +2009,11 @@ export default function Call() {
         </div>
       )}
 
-      {/* ---------- PRE-JOIN ---------- */}
+          {/* ---------- PRE-JOIN ---------- */}
       {!entered && (
-        <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto bg-background p-6">
-          <div className="w-full max-w-md">
+        <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto bg-background px-4 py-8 sm:p-6">
+          <div className="w-full max-w-lg">
+            {/* Header */}
             <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -2030,19 +2038,32 @@ export default function Call() {
                     to={`/auth?returnTo=/call/${code}`}
                     className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
                   >
-                    Sign in to keep meetings
+                    Sign in
                   </Link>
                 )}
               </div>
             </div>
 
-            <p className="mt-10 text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground/70">
-              Ready to join?
-            </p>
-            <p className="mt-2 font-mono text-sm tracking-tight text-muted-foreground">{code}</p>
+            {/* Meeting info */}
+            <div className="mt-8 sm:mt-10">
+              <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-muted-foreground/70">
+                {isHost ? "Start your meeting" : "Ready to join?"}
+              </p>
+              <div className="mt-2 flex items-center gap-3">
+                <p className="font-mono text-sm tracking-tight text-muted-foreground">{code}</p>
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="size-1 rounded-full bg-emerald-400" />
+                  Active
+                </span>
+              </div>
+              {isHost && (
+                <p className="mt-1 text-xs text-muted-foreground/60">You're the host</p>
+              )}
+            </div>
 
+            {/* Camera preview */}
             <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-2xl bg-muted/60 ring-1 ring-black/10 dark:ring-white/10">
-              {call.localStream ? (
+              {call.localStream && call.camOn ? (
                 <VideoSurface stream={call.localStream} />
               ) : (
                 <Avatar name={displayName} />
@@ -2050,15 +2071,54 @@ export default function Call() {
               <div className="absolute bottom-2.5 left-3 rounded-lg bg-black/50 px-2 py-0.5 text-xs backdrop-blur-sm">
                 {displayName}
               </div>
+              {/* Camera off indicator */}
+              {!call.camOn && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex size-14 items-center justify-center rounded-full bg-foreground/10 backdrop-blur-sm">
+                      <VideoOff className="size-6 text-muted-foreground" />
+                    </div>
+                    <span className="text-xs text-muted-foreground/70">Camera off</span>
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* Device status */}
+            <div className="mt-4 flex items-center gap-4 text-[11px]">
+              <span className={cn(
+                "flex items-center gap-1.5",
+                call.mediaError ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+              )}>
+                {call.mediaError ? (
+                  <AlertCircle className="size-3" />
+                ) : (
+                  <CheckCircle2 className="size-3" />
+                )}
+                {call.mediaError ? "Mic unavailable" : "Mic ready"}
+              </span>
+              <span className={cn(
+                "flex items-center gap-1.5",
+                !call.camOn ? "text-muted-foreground/60" : "text-emerald-600 dark:text-emerald-400"
+              )}>
+                {!call.camOn ? (
+                  <VideoOff className="size-3" />
+                ) : (
+                  <CheckCircle2 className="size-3" />
+                )}
+                {!call.camOn ? "Camera off" : "Camera ready"}
+              </span>
+            </div>
+
+            {/* Media error */}
             {call.mediaError && (
-              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
                 {call.mediaError} You can still join to listen and chat.
               </p>
             )}
 
-            <div className="mt-5 flex items-center justify-between gap-2">
+            {/* Controls row */}
+            <div className="mt-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -2092,17 +2152,69 @@ export default function Call() {
                 >
                   {call.camOn ? <Video className="size-5" /> : <VideoOff className="size-5" />}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPanel("devices")}
+                  aria-label="Device settings"
+                  className="flex size-11 items-center justify-center rounded-full bg-foreground/10 text-foreground transition-colors hover:bg-foreground/20"
+                >
+                  <Settings2 className="size-5" />
+                </button>
               </div>
 
               <Button
-                onClick={handleJoin}
-                disabled={isChecking || isMissing}
+                onClick={() => void handleJoin()}
+                disabled={isChecking || isMissing || joining}
                 className="h-11 rounded-full px-8 btn-glow"
               >
-                Join now
+                {joining ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Joining...
+                  </>
+                ) : isChecking ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : isHost ? (
+                  "Start Meeting"
+                ) : (
+                  "Join Meeting"
+                )}
               </Button>
             </div>
 
+            {/* Connection error */}
+            {call.joinError && (
+              <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                <p className="text-sm text-red-600 dark:text-red-300">{call.joinError}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    onClick={() => {
+                      setJoining(false);
+                      void call.join();
+                      setEntered(true);
+                    }}
+                    size="sm"
+                    className="rounded-full"
+                  >
+                    <RefreshCw className="mr-1.5 size-3.5" />
+                    Try Again
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => void handleLeave()}
+                  >
+                    Leave
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Name input */}
             <label className="mt-7 block text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">
               Your name
             </label>
@@ -2114,6 +2226,7 @@ export default function Call() {
               className="mt-2 h-11 rounded-xl border-border/60 bg-muted/50 text-foreground placeholder:text-muted-foreground"
             />
 
+            {/* Footer */}
             <div className="mt-8 border-t border-border/60 pt-6 text-center">
               <p className="text-xs text-muted-foreground/70">
                 Peer-to-peer · nothing you say is recorded unless you record it
@@ -2122,9 +2235,19 @@ export default function Call() {
           </div>
         </div>
       )}
+
+      {/* Device settings panel overlay */}
+      {panel === "devices" && !entered && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm sm:p-6">
+          <div className="w-full max-w-sm">
+            <DeviceSettingsPanel call={call} onClose={() => setPanel("none")} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 /* ---------------- tiles ---------------- */
 
