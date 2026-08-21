@@ -62,6 +62,27 @@ export const launchPoll = mutation({
     const poll = await ctx.db.get(pollId);
     if (poll === null) throw new Error("Poll not found.");
     await ctx.db.patch(pollId, { launched: true, closed: false });
+
+    // Notify all participants in the meeting about the new poll.
+    const participants = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", code))
+      .collect();
+    const hostId = await requireHost(ctx, code);
+    const me = await ctx.db.get(hostId);
+    for (const p of participants) {
+      if (p.userId && p.userId !== me?._id) {
+        await ctx.db.insert("notifications", {
+          userId: p.userId,
+          type: "poll",
+          title: `${me?.name || "Host"} started a poll`,
+          body: poll.title,
+          link: `/call/${code}`,
+          read: false,
+          createdAt: Date.now(),
+        });
+      }
+    }
   },
 });
 

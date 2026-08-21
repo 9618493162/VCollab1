@@ -23,6 +23,7 @@ import {
   Info,
   Keyboard,
   Languages,
+  LayoutDashboard,
   LayoutGrid,
   ListChecks,
   Loader2,
@@ -63,6 +64,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { DeviceSettingsPanel } from "@/components/DeviceSettingsPanel";
 import { MeetingInfoModal } from "@/components/MeetingInfoModal";
 import { NotesTasksPanel } from "@/components/NotesTasksPanel";
+import { CollaborationWorkspace } from "@/components/CollaborationWorkspace";
 import { SecurityPanel } from "@/components/SecurityPanel";
 import {
   DropdownMenu,
@@ -295,6 +297,7 @@ export default function Call() {
     | "none"
     | "chat"
     | "people"
+    | "collab"
     | "polls"
     | "qa"
     | "agenda"
@@ -304,6 +307,7 @@ export default function Call() {
     | "notes"
     | "ai"
   >("none");
+  const [collabTab, setCollabTab] = useState<"notes" | "tasks" | "polls" | "qa" | "files">("notes");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
@@ -1164,9 +1168,14 @@ export default function Call() {
                     <Bot className="mr-2 size-4" /> AI assistant
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => setPanel((p) => (p === "notes" ? "none" : "notes"))}
+                    onClick={() => { setCollabTab("notes"); setPanel((p) => (p === "collab" ? "none" : "collab")); }}
                   >
-                    <ClipboardList className="mr-2 size-4" /> Notes & tasks
+                    <LayoutDashboard className="mr-2 size-4" /> Workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => { setCollabTab("tasks"); setPanel((p) => (p === "collab" ? "none" : "collab")); }}
+                  >
+                    <ClipboardList className="mr-2 size-4" /> Tasks
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -1854,17 +1863,13 @@ export default function Call() {
                       <span className="text-[10px] text-muted-foreground">Record</span>
                     </button>
                   )}
-                  <button type="button" onClick={() => { setPanel((p) => (p === "notes" ? "none" : "notes")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><PenLine className="size-5" /></div>
-                    <span className="text-[10px] text-muted-foreground">Notes</span>
+                  <button type="button" onClick={() => { setCollabTab("notes"); setPanel((p) => (p === "collab" ? "none" : "collab")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><LayoutDashboard className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Workspace</span>
                   </button>
-                  <button type="button" onClick={() => { setPanel((p) => (p === "polls" ? "none" : "polls")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><BarChart3 className="size-5" /></div>
-                    <span className="text-[10px] text-muted-foreground">Polls</span>
-                  </button>
-                  <button type="button" onClick={() => { setPanel((p) => (p === "qa" ? "none" : "qa")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><MessagesSquare className="size-5" /></div>
-                    <span className="text-[10px] text-muted-foreground">Q&A</span>
+                  <button type="button" onClick={() => { setCollabTab("tasks"); setPanel((p) => (p === "collab" ? "none" : "collab")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><ClipboardList className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Tasks</span>
                   </button>
                   <button type="button" onClick={() => { setPanel((p) => (p === "agenda" ? "none" : "agenda")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
                     <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><ClipboardList className="size-5" /></div>
@@ -2078,6 +2083,17 @@ export default function Call() {
             {panel === "devices" && (
               <FluidPanel key="devices">
                 <DeviceSettingsPanel call={call} onClose={() => setPanel("none")} />
+              </FluidPanel>
+            )}
+            {panel === "collab" && (
+              <FluidPanel key="collab">
+                <CollaborationWorkspace
+                  code={code}
+                  isHost={isHost === true}
+                  clientId={call.clientId}
+                  onClose={() => setPanel("none")}
+                  initialTab={collabTab}
+                />
               </FluidPanel>
             )}
             {panel === "notes" && (

@@ -50,6 +50,43 @@ export const saveNotes = mutation({
         updatedBy: userId,
       });
     }
+
+    // Detect @mentions and notify mentioned users.
+    // Pattern: @Name (where Name is 2-40 alphanumeric/underscore chars).
+    const mentionPattern = /@([A-Za-z][A-Za-z0-9_]{1,39})/g;
+    const mentionedNames = new Set<string>();
+    let match: RegExpExecArray | null;
+    while ((match = mentionPattern.exec(content)) !== null) {
+      mentionedNames.add(match[1]);
+    }
+    if (mentionedNames.size > 0) {
+      const me = await ctx.db.get(userId);
+      const senderName = me?.name || "Someone";
+      // Find users in the meeting by presence and notify those matching
+      const participants = await ctx.db
+        .query("presence")
+        .withIndex("by_code", (q) => q.eq("code", normalized))
+        .collect();
+      const code = normalized;
+      for (const participant of participants) {
+        if (participant.userId && participant.userId !== userId) {
+          const pUser = await ctx.db.get(participant.userId);
+          const pName = pUser?.name || participant.name;
+          if (mentionedNames.has(pName)) {
+            // Lazy-import to avoid circular deps; inline create
+            await ctx.db.insert("notifications", {
+              userId: participant.userId,
+              type: "mention",
+              title: `${senderName} mentioned you in meeting notes`,
+              body: content.slice(0, 200),
+              link: `/call/${code}`,
+              read: false,
+              createdAt: Date.now(),
+            });
+          }
+        }
+      }
+    }
   },
 });
 
@@ -96,6 +133,33 @@ export const addCard = mutation({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    // Notify the assignee if someone was assigned to this card.
+    if (args.assignee) {
+      const participants = await ctx.db
+        .query("presence")
+        .withIndex("by_code", (q) => q.eq("code", normalized))
+        .collect();
+      const me = await ctx.db.get(userId);
+      for (const p of participants) {
+        if (p.userId && p.userId !== userId) {
+          const pUser = await ctx.db.get(p.userId);
+          const pName = (pUser?.name || p.name).trim();
+          if (pName.toLowerCase() === args.assignee.trim().toLowerCase()) {
+            await ctx.db.insert("notifications", {
+              userId: p.userId,
+              type: "task_assigned",
+              title: `${me?.name || "Someone"} assigned you a task`,
+              body: title,
+              link: `/call/${normalized}`,
+              read: false,
+              createdAt: Date.now(),
+            });
+            break;
+          }
+        }
+      }
+    }
   },
 });
 

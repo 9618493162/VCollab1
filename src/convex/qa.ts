@@ -91,6 +91,28 @@ export const answerQuestion = mutation({
       await ctx.db.patch(questionId, { answered: false, answer: undefined });
     } else {
       await ctx.db.patch(questionId, { answered: true, answer: clean });
+
+      // Notify the question author that their question was answered.
+      const participants = await ctx.db
+        .query("presence")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .collect();
+      const authId = await getAuthUserId(ctx);
+      const me = authId !== null ? await ctx.db.get(authId) : null;
+      for (const p of participants) {
+        if (p.clientId === question.clientId && p.userId) {
+          await ctx.db.insert("notifications", {
+            userId: p.userId,
+            type: "qa_answer",
+            title: `Your question was answered`,
+            body: question.text.slice(0, 100),
+            link: `/call/${code}`,
+            read: false,
+            createdAt: Date.now(),
+          });
+          break;
+        }
+      }
     }
   },
 });
