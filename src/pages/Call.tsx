@@ -1099,7 +1099,7 @@ export default function Call() {
           </header>
 
           {/* ---------- stage ---------- */}
-          <main className="call-page-main relative z-10 p-3 sm:p-4">
+          <main className="call-page-main relative z-10 min-h-0 p-3 sm:p-4">
             {isMissing ? (
               <div className="flex h-full flex-col items-center justify-center text-center">
                 <p className="text-sm text-muted-foreground">This meeting doesn't exist (yet).</p>
@@ -1387,7 +1387,8 @@ export default function Call() {
           )}
 
           {/* ---------- control bar ---------- */}
-          <footer className="relative z-10 flex shrink-0 items-center justify-center px-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:pb-5 sm:px-3">
+          <footer className="relative z-10 flex w-full shrink-0 items-center justify-center px-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:pb-5 sm:px-3">
+            <div className="flex w-full max-w-3xl items-center justify-center">
             <div className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-background/80 px-2 py-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:gap-2 sm:p-2">
             <ControlButton
               active={call.micOn}
@@ -1570,8 +1571,6 @@ export default function Call() {
               <MessageSquare className="size-5" />
             </ControlButton>
             </div>{/* end desktop-only buttons */}
-
-            {/* More menu — mobile only */}
             <div className="flex sm:hidden">
               <ControlButton
                 active={showMobileMenu}
@@ -1598,28 +1597,30 @@ export default function Call() {
               </div>
             )}
           </div>
-          {/* End/Leave button — always visible outside scroll area */}
-          {isHost ? (
-            <Button
-              onClick={() => setConfirmEnd(true)}
-              className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
-              aria-label="End or leave meeting"
-              title="End / Leave"
-            >
-              <PhoneOff className="size-5" />
-            </Button>
-          ) : (
-            <Button
-              onClick={handleLeave}
-              className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
-              aria-label="Leave meeting"
-            >
-              <PhoneOff className="size-5" />
-            </Button>
-          )}
+            {/* End/Leave */}
+            {isHost ? (
+              <Button
+                onClick={() => setConfirmEnd(true)}
+                className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
+                aria-label="End or leave meeting"
+                title="End / Leave"
+              >
+                <PhoneOff className="size-5" />
+              </Button>
+            ) : (
+              <Button
+                onClick={handleLeave}
+                className="ml-2 h-10 w-10 shrink-0 rounded-full bg-red-500 p-0 text-white hover:bg-red-600 sm:h-11 sm:w-11 md:h-12 md:w-12"
+                aria-label="Leave meeting"
+              >
+                <PhoneOff className="size-5" />
+              </Button>
+            )}
+            </div>
           </footer>
 
           {/* ---------- mobile more menu overlay ---------- */}
+          <AnimatePresence>
           {showMobileMenu && (
             <div className="fixed inset-0 z-50 sm:hidden">
               <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMobileMenu(false)} />
@@ -1703,6 +1704,7 @@ export default function Call() {
               </motion.div>
             </div>
           )}
+          </AnimatePresence>
 
           {/* ---------- host leave dialog: Transfer & Leave / End / Cancel ---------- */}
           <AlertDialog open={confirmEnd} onOpenChange={(open) => { setConfirmEnd(open); if (!open) { setHostLeaveMode(false); setTransferTarget(null); } }}>

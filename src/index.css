@@ -382,3 +382,18 @@ body.meeting-active {
     max-width: 100vw;
   }
 }
+
+/* Mobile: prevent double-tap zoom on control buttons */
+@media (pointer: coarse) {
+  button {
+    touch-action: manipulation;
+  }
+}
+
+/* Mobile keyboard: when a text input is focused, keep footer visible */
+/* The viewport-height unit (dvh) handles iOS Safari correctly */
+@supports (height: 100dvh) {
+  .call-page-main {
+    height: 100dvh;
+  }
+}
