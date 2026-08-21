@@ -99,6 +99,8 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground antialiased">
+      {/* Skip to content for keyboard users */}
+      <a href="#features" className="skip-link">Skip to content</a>
       {/* ---------- floating glass nav ---------- */}
       <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6">
         <div className="glass-float depth-2 mx-auto flex h-14 max-w-6xl items-center justify-between rounded-full px-4 sm:px-5">
