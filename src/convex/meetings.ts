@@ -826,6 +826,18 @@ export const endMeeting = mutation({
       payload: JSON.stringify({ endedBy: userId }),
       createdAt: now,
     });
+
+    // Audit log
+    const actor = await ctx.db.get(userId);
+    await ctx.db.insert("auditLog", {
+      action: "meeting.ended",
+      actorId: userId,
+      actorName: actor?.name,
+      targetId: normalized,
+      targetType: "meeting",
+      meta: { participantCount: Math.max(live.length, 1) },
+      createdAt: now,
+    });
   },
 });
 
@@ -856,13 +868,27 @@ export const transferHost = mutation({
       throw new Error("That person isn't in the meeting.");
 
     await ctx.db.patch(room._id, { createdBy: targetUserId });
+    const now = Date.now();
     await ctx.db.insert("signals", {
       code: normalized,
       from: userId,
       to: "*",
       kind: "host",
       payload: JSON.stringify({ hostId: targetUserId }),
-      createdAt: Date.now(),
+      createdAt: now,
+    });
+
+    // Audit log
+    const actor = await ctx.db.get(userId);
+    const target = await ctx.db.get(targetUserId);
+    await ctx.db.insert("auditLog", {
+      action: "host.transferred",
+      actorId: userId,
+      actorName: actor?.name,
+      targetId: normalized,
+      targetType: "meeting",
+      meta: { newHostName: target?.name, newHostId: targetUserId },
+      createdAt: now,
     });
   },
 });
@@ -942,6 +968,16 @@ export const lockMeeting = mutation({
     if (room.createdBy !== userId)
       throw new Error("Only the host can lock the meeting.");
     await ctx.db.patch(room._id, { locked });
+    // Audit log
+    const actor = await ctx.db.get(userId);
+    await ctx.db.insert("auditLog", {
+      action: locked ? "meeting.locked" : "meeting.unlocked",
+      actorId: userId,
+      actorName: actor?.name,
+      targetId: normalized,
+      targetType: "meeting",
+      createdAt: Date.now(),
+    });
   },
 });
 

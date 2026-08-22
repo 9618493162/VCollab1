@@ -104,6 +104,17 @@ export const createRoom = mutation({
           locked: false,
         });
         await scheduleExpirySweep(ctx, expiresAt);
+        // Audit log
+        const user = await ctx.db.get(userId);
+        await ctx.db.insert("auditLog", {
+          action: "meeting.created",
+          actorId: userId,
+          actorName: user?.name,
+          targetId: code,
+          targetType: "meeting",
+          meta: { expiresAt },
+          createdAt: now,
+        });
         return code;
       }
     }

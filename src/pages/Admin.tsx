@@ -216,7 +216,81 @@ export default function Admin() {
           </p>
         </div>
       )}
+
+      {/* Audit Log */}
+      <AuditLogSection />
       </div>
     </>
   );
+
+
+/** Audit log viewer — shows recent security-relevant actions. */
+function AuditLogSection() {
+  const logs = useQuery(api.audit.list, { limit: 50 });
+  const [filter, setFilter] = useState<string>("all");
+
+  const ACTION_LABELS: Record<string, string> = {
+    "meeting.created": "Meeting created",
+    "meeting.ended": "Meeting ended",
+    "meeting.locked": "Meeting locked",
+    "meeting.unlocked": "Meeting unlocked",
+    "host.transferred": "Host transferred",
+  };
+
+  const filtered = (logs ?? []).filter(
+    (l) => filter === "all" || l.action.startsWith(filter),
+  );
+
+  return (
+    <section className="mt-8 rounded-2xl border border-border/80 bg-card/50 p-5">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="size-4 text-muted-foreground" /> Audit log
+      </h2>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {["all", "meeting", "host"].map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            className={"rounded-full border px-3 py-1 text-xs capitalize transition-colors " +
+              (filter === f
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground")}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+      {logs === undefined ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Loading audit log…</p>
+      ) : filtered.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">No audit entries yet.</p>
+      ) : (
+        <ul className="max-h-80 space-y-2 overflow-y-auto">
+          {filtered.map((log) => (
+            <li key={log._id} className="flex items-start gap-3 rounded-xl border border-border/60 px-3 py-2">
+              <span className="mt-0.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono capitalize">
+                {ACTION_LABELS[log.action] ?? log.action}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm">
+                  <span className="font-medium">{log.actorName ?? "System"}</span>
+                  {" "}
+                  <span className="text-muted-foreground">{log.action}</span>
+                  {log.targetId && (
+                    <span className="font-mono text-xs text-muted-foreground"> on {log.targetId}</span>
+                  )}
+                </p>
+                <p className="text-[10px] text-muted-foreground/70">
+                  {new Date(log.createdAt).toLocaleString()}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 }

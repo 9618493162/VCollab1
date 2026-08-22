@@ -66,6 +66,7 @@ import { MeetingInfoModal } from "@/components/MeetingInfoModal";
 import { NotesTasksPanel } from "@/components/NotesTasksPanel";
 import { CollaborationWorkspace } from "@/components/CollaborationWorkspace";
 import { SecurityPanel } from "@/components/SecurityPanel";
+import { Megaphone } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -384,8 +385,23 @@ export default function Call() {
   const rejectParticipant = useMutation(api.security.rejectParticipant);
   const makeCoHost = useMutation(api.security.makeCoHost);
   const muteAll = useMutation(api.security.muteAll);
+  const sendAnnouncement = useMutation(api.announcements.send);
+  const announcements = useQuery(api.announcements.list, code ? { code, limit: 10 } : "skip");
   const isCoHost = meetingSettings?.coHosts?.includes(call.clientId) === true;
   const isModerator = isHost === true || isCoHost;
+
+  // Show host announcements as toasts
+  const prevAnnouncementCount = useRef(0);
+  useEffect(() => {
+    if (!announcements || !isHost) return;
+    if (announcements.length > prevAnnouncementCount.current && prevAnnouncementCount.current > 0) {
+      const latest = announcements[0];
+      if (latest.fromId !== call.clientId) {
+        toast.info(`${latest.from}: ${latest.text}`);
+      }
+    }
+    prevAnnouncementCount.current = announcements.length;
+  }, [announcements, isHost, call.clientId]);
 
   // Toast notification when someone new enters the waiting room
   useEffect(() => {
@@ -1763,6 +1779,22 @@ export default function Call() {
 
             {isHost && (
               <div className="ml-1 flex items-center gap-1.5 border-l border-border/60 pl-2">
+                <ControlButton
+                  active={false}
+                  activeClass="bg-foreground text-background"
+                  inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
+                  onClick={() => {
+                    const text = prompt("Send announcement to all participants:");
+                    if (text && text.trim() && code) {
+                      sendAnnouncement({ code, text: text.trim() }).then(() => {
+                        toast.success("Announcement sent.");
+                      }).catch((e: Error) => toast.error(e.message));
+                    }
+                  }}
+                  label="Send announcement"
+                >
+                  <Megaphone className="size-5" />
+                </ControlButton>
                 <ControlButton
                   active={room?.locked === true}
                   activeClass="bg-foreground text-background"

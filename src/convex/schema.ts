@@ -497,6 +497,29 @@ const schema = defineSchema(
       ),
       lastSeen: v.number(),
     }).index("by_user", ["userId"]),
+
+    // audit log — tracks security-relevant actions for compliance
+    auditLog: defineTable({
+      action: v.string(), // e.g. "meeting.created", "host.transferred"
+      actorId: v.optional(v.id("users")),
+      actorName: v.optional(v.string()),
+      targetId: v.optional(v.string()), // meeting code, user id, etc.
+      targetType: v.optional(v.string()), // "meeting", "user", "workspace", "settings"
+      meta: v.optional(v.any()), // additional structured data
+      createdAt: v.number(),
+    })
+      .index("by_actor", ["actorId", "createdAt"])
+      .index("by_target", ["targetType", "targetId", "createdAt"])
+      .index("by_time", ["createdAt"]),
+
+    // meeting announcements — host broadcasts
+    announcements: defineTable({
+      code: v.string(), // meeting code
+      from: v.string(), // sender display name
+      fromId: v.id("users"),
+      text: v.string(),
+      createdAt: v.number(),
+    }).index("by_code", ["code", "createdAt"]),
   },
   {
     schemaValidation: false,
