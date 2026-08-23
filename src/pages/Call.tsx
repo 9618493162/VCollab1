@@ -66,7 +66,11 @@ import { MeetingInfoModal } from "@/components/MeetingInfoModal";
 import { NotesTasksPanel } from "@/components/NotesTasksPanel";
 import { CollaborationWorkspace } from "@/components/CollaborationWorkspace";
 import { SecurityPanel } from "@/components/SecurityPanel";
-import { Megaphone } from "lucide-react";
+import { MeetingHealth } from "@/components/MeetingHealth";
+import { LayoutSwitcher, type LayoutMode } from "@/components/PresentationLayouts";
+import { MeetingInsights } from "@/components/MeetingInsights";
+import { FollowUpGenerator } from "@/components/FollowUpGenerator";
+import { Megaphone } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -307,12 +311,16 @@ export default function Call() {
     | "devices"
     | "notes"
     | "ai"
+    | "insights"
+    | "followup"
   >("none");
   const [collabTab, setCollabTab] = useState<"notes" | "tasks" | "polls" | "qa" | "files">("notes");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("gallery");
+  const [showHealth, setShowHealth] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [hostLeaveMode, setHostLeaveMode] = useState<false | "pick-transfer" | false>(false);
@@ -1121,30 +1129,30 @@ export default function Call() {
 
               <ThemeToggle className="flex" />
 
-              {/* view mode toggle */}
-              <div className="hidden items-center rounded-full border border-border/60 bg-muted/50 p-0.5 md:flex">
-                {(
-                  [
-                    { id: "gallery", icon: LayoutGrid, label: "Gallery" },
-                    { id: "speaker", icon: MonitorUp, label: "Speaker" },
-                    { id: "focus", icon: Maximize2, label: "Focus" },
-                  ] as const
-                ).map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setView(v.id)}
-                    title={v.label}
-                    aria-label={v.label}
-                    className={cn(
-                      "flex size-8 items-center justify-center rounded-full transition-colors",
-                      view === v.id ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <v.icon className="size-4" />
-                  </button>
-                ))}
+              {/* layout switcher */}
+              <div className="hidden md:block">
+                <LayoutSwitcher
+                  current={layoutMode}
+                  onChange={(mode) => {
+                    setLayoutMode(mode);
+                    if (mode === "focus") setView("focus");
+                    else if (mode === "screen") setView("speaker");
+                    else setView(mode);
+                  }}
+                  hasScreenShare={!!call.sharing}
+                />
               </div>
+
+              {/* connection health */}
+              <button
+                type="button"
+                onClick={() => setShowHealth(!showHealth)}
+                title="Connection health"
+                aria-label="Connection health"
+                className="hidden size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:flex"
+              >
+                <Signal className="size-4" />
+              </button>
 
               <button
                 type="button"
@@ -1218,6 +1226,17 @@ export default function Call() {
                     onClick={() => setPanel((p) => (p === "whiteboard" ? "none" : "whiteboard"))}
                   >
                     <PenLine className="mr-2 size-4" /> Whiteboard
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "insights" ? "none" : "insights"))}
+                  >
+                    <BarChart3 className="mr-2 size-4" /> Meeting insights
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPanel((p) => (p === "followup" ? "none" : "followup"))}
+                  >
+                    <Sparkles className="mr-2 size-4" /> Generate follow-up
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShowShortcuts(true)}>
@@ -1911,6 +1930,22 @@ export default function Call() {
                     <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><LayoutGrid className="size-5" /></div>
                     <span className="text-[10px] text-muted-foreground">Board</span>
                   </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "insights" ? "none" : "insights")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><BarChart3 className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Insights</span>
+                  </button>
+                  <button type="button" onClick={() => { setPanel((p) => (p === "followup" ? "none" : "followup")); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Sparkles className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Follow-up</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowSecurity(true); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Shield className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Security</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowHealth(!showHealth); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Signal className="size-5" /></div>
+                    <span className="text-[10px] text-muted-foreground">Health</span>
+                  </button>
                   <button type="button" onClick={() => { setShowInfo(true); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
                     <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Info className="size-5" /></div>
                     <span className="text-[10px] text-muted-foreground">Info</span>
@@ -2195,6 +2230,32 @@ export default function Call() {
               onClose={() => setPanel("none")}
             />
           )}
+          {panel === "insights" && (
+            <FluidPanel from="right" className="absolute inset-y-0 right-0 z-40 flex h-full w-full max-w-sm flex-col border-l border-border/60 bg-background/95 backdrop-blur-2xl sm:max-w-md">
+              <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
+                <p className="text-sm font-medium">Meeting Insights</p>
+                <button type="button" onClick={() => setPanel("none")} className="text-muted-foreground hover:text-foreground">
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <MeetingInsights code={code} />
+              </div>
+            </FluidPanel>
+          )}
+          {panel === "followup" && (
+            <FluidPanel from="right" className="absolute inset-y-0 right-0 z-40 flex h-full w-full max-w-sm flex-col border-l border-border/60 bg-background/95 backdrop-blur-2xl sm:max-w-md">
+              <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
+                <p className="text-sm font-medium">Generate Follow-up</p>
+                <button type="button" onClick={() => setPanel("none")} className="text-muted-foreground hover:text-foreground">
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <FollowUpGenerator code={code} />
+              </div>
+            </FluidPanel>
+          )}
         </>
       )}
 
@@ -2217,6 +2278,24 @@ export default function Call() {
           isCoHost={isCoHost}
           onClose={() => setShowSecurity(false)}
         />
+      )}
+
+      {/* ---------- connection health overlay ---------- */}
+      {showHealth && entered && (
+        <div className="absolute top-16 right-4 z-50 w-64 rounded-2xl border border-border/60 bg-background/95 p-4 shadow-2xl backdrop-blur-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Meeting Health</h3>
+            <button type="button" onClick={() => setShowHealth(false)} className="text-muted-foreground hover:text-foreground">
+              <X className="size-3.5" />
+            </button>
+          </div>
+          <MeetingHealth
+            stats={{}}
+            audioQuality="unknown"
+            videoQuality="unknown"
+            isReconnecting={false}
+          />
+        </div>
       )}
 
       {/* ---------- keyboard shortcuts help ---------- */}
@@ -2367,6 +2446,14 @@ export default function Call() {
                 {!call.camOn ? "Camera off" : "Camera ready"}
               </span>
             </div>
+
+            {/* Background mode indicator */}
+            {call.camOn && (
+              <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground/60">
+                <span className="rounded-full border border-border/40 px-2 py-0.5">No background</span>
+                <span className="rounded-full border border-border/40 px-2 py-0.5">Blur</span>
+              </div>
+            )}
 
             {/* Media error */}
             {call.mediaError && (

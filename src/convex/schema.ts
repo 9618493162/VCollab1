@@ -574,6 +574,70 @@ const schema = defineSchema(
       text: v.string(),
       createdAt: v.number(),
     }).index("by_code", ["code", "createdAt"]),
+
+    // meeting templates — pre-built meeting configurations
+    meetingTemplates: defineTable({
+      name: v.string(), // "Team Standup", "Project Meeting", etc.
+      description: v.optional(v.string()),
+      icon: v.optional(v.string()), // emoji or icon name
+      agenda: v.optional(v.array(v.string())), // pre-built agenda items
+      defaultSettings: v.optional(v.any()), // meeting settings override
+      isSystem: v.boolean(), // true = built-in, false = user-created
+      createdBy: v.optional(v.id("users")),
+      workspaceId: v.optional(v.id("workspaces")),
+      createdAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_creator", ["createdBy"]),
+
+    // user device preferences — remembered across sessions
+    userDevicePreferences: defineTable({
+      userId: v.id("users"),
+      lastMicDeviceId: v.optional(v.string()),
+      lastCamDeviceId: v.optional(v.string()),
+      lastSpeakerDeviceId: v.optional(v.string()),
+      joinWithMic: v.boolean(),
+      joinWithCam: v.boolean(),
+      backgroundMode: v.optional(v.union(
+        v.literal("none"),
+        v.literal("blur"),
+        v.literal("image"),
+      )),
+      backgroundUrl: v.optional(v.string()), // custom background image URL
+      displayName: v.optional(v.string()),
+      updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    // meeting follow-ups — AI-generated post-meeting content
+    meetingFollowUps: defineTable({
+      code: v.string(), // meeting code
+      userId: v.id("users"),
+      type: v.string(), // "email", "message", "team-update"
+      content: v.string(),
+      createdAt: v.number(),
+    }).index("by_code_user", ["code", "userId"]),
+
+    // meeting insights — post-meeting analytics and summary
+    meetingInsights: defineTable({
+      code: v.string(), // meeting code
+      summary: v.optional(v.string()),
+      keyDecisions: v.optional(v.array(v.string())),
+      actionItems: v.optional(v.array(v.object({
+        task: v.string(),
+        assignee: v.optional(v.string()),
+        deadline: v.optional(v.string()),
+      }))),
+      unresolvedQuestions: v.optional(v.array(v.string())),
+      nextSteps: v.optional(v.array(v.string())),
+      stats: v.optional(v.object({
+        durationMs: v.optional(v.number()),
+        participantCount: v.optional(v.number()),
+        messageCount: v.optional(v.number()),
+        questionCount: v.optional(v.number()),
+        taskCount: v.optional(v.number()),
+      })),
+      generatedAt: v.number(),
+    }).index("by_code", ["code"]),
   },
   {
     schemaValidation: false,
