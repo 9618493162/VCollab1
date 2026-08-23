@@ -4,7 +4,7 @@ import { mutation, MutationCtx, QueryCtx, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { normalizeCode } from "./rooms";
 
-/** Resolve the signed-in user as host of `code`, or throw. */
+/** Resolve the signed-in user as host or co-host of `code`, or throw. */
 async function requireHost(ctx: MutationCtx | QueryCtx, code: string) {
   const userId = await getAuthUserId(ctx);
   if (userId === null) throw new Error("Sign in to manage breakout rooms");
@@ -13,8 +13,21 @@ async function requireHost(ctx: MutationCtx | QueryCtx, code: string) {
     .withIndex("by_code", (q) => q.eq("code", code))
     .first();
   if (room === null) throw new Error("Meeting not found.");
-  if (room.createdBy !== userId) throw new Error("Only the host can manage breakout rooms.");
-  return userId;
+  if (room.createdBy === userId) return userId;
+  // Co-hosts can also manage breakouts
+  const settings = await ctx.db
+    .query("meetingSettings")
+    .withIndex("by_code", (q) => q.eq("code", code))
+    .first();
+  if (settings) {
+    const rows = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", code))
+      .collect();
+    const mine = rows.find((r) => r.userId === userId);
+    if (mine && settings.coHosts.includes(mine.clientId)) return userId;
+  }
+  throw new Error("Only the host or a co-host can manage breakout rooms.");
 }
 
 async function getSession(ctx: MutationCtx | QueryCtx, code: string) {
@@ -292,6 +305,63 @@ export const endBreakoutSession = mutation({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .collect();
     for (const m of members) await ctx.db.delete(m._id);
+  },
+});
+
+/** Host randomly distributes all present participants across existing rooms. */
+export const autoAssign = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    await requireHost(ctx, code);
+    const normalized = normalizeCode(code);
+    const session = await getSession(ctx, normalized);
+    if (session === null || session.status !== "active")
+      throw new Error("Breakout rooms aren't running right now.");
+
+    const rooms = await ctx.db
+      .query("breakoutRooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .collect();
+    if (rooms.length === 0) throw new Error("Create at least one room first.");
+
+    // Clear existing assignments
+    const oldMembers = await ctx.db
+      .query("breakoutMembers")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .collect();
+    for (const m of oldMembers) await ctx.db.delete(m._id);
+
+    // Gather non-host participants from presence
+    const presence = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .collect();
+    const meeting = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    const assignable = presence.filter(
+      (p) => !p.waiting && p.userId !== meeting?.createdBy,
+    );
+
+    // Shuffle (Fisher-Yates)
+    for (let i = assignable.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [assignable[i], assignable[j]] = [assignable[j], assignable[i]];
+    }
+
+    // Round-robin distribute
+    for (let i = 0; i < assignable.length; i++) {
+      const room = rooms[i % rooms.length];
+      const p = assignable[i];
+      await ctx.db.insert("breakoutMembers", {
+        code: normalized,
+        roomId: room._id,
+        clientId: p.clientId,
+        name: cleanName(p.name) || "Guest",
+        joinedAt: Date.now(),
+      });
+    }
   },
 });
 

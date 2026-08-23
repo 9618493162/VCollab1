@@ -18,7 +18,7 @@ describe("breakout rooms (Phase 55)", () => {
 
     await expect(
       other.mutation(api.breakouts.createBreakout, { code, name: "Sneaky" }),
-    ).rejects.toThrow("Only the host can manage breakout rooms");
+    ).rejects.toThrow("Only the host or a co-host can manage breakout rooms.");
   });
 
   it("creating the first room starts an active session and names rooms sequentially", async () => {

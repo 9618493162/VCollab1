@@ -54,6 +54,7 @@ export function BreakoutsPanel({
   const setBreakoutTimer = useMutation(api.breakouts.setBreakoutTimer);
   const clearBreakoutTimer = useMutation(api.breakouts.clearBreakoutTimer);
   const endBreakoutSession = useMutation(api.breakouts.endBreakoutSession);
+  const autoAssign = useMutation(api.breakouts.autoAssign);
   const sendBreakoutMessage = useMutation(api.breakouts.sendBreakoutMessage);
 
   const session = data?.session ?? null;
@@ -205,18 +206,34 @@ export function BreakoutsPanel({
             {/* rooms */}
             <div className="space-y-2">
               {isHost && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    void createBreakout({ code }).catch((error) =>
-                      toast.error(error instanceof Error ? error.message : "Couldn't add a room."),
-                    )
-                  }
-                  className="w-full rounded-full border-border/60 text-foreground hover:bg-muted"
-                >
-                  <Plus className="size-3.5" /> Add room
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      void createBreakout({ code }).catch((error) =>
+                        toast.error(error instanceof Error ? error.message : "Couldn't add a room."),
+                      )
+                    }
+                    className="flex-1 rounded-full border-border/60 text-foreground hover:bg-muted"
+                  >
+                    <Plus className="size-3.5" /> Add room
+                  </Button>
+                  {rooms.length >= 2 && participants.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void autoAssign({ code }).catch((error) =>
+                          toast.error(error instanceof Error ? error.message : "Couldn't auto-assign."),
+                        )
+                      }
+                      className="flex-1 rounded-full border-border/60 text-foreground hover:bg-muted"
+                    >
+                      Auto-assign
+                    </Button>
+                  )}
+                </div>
               )}
 
               {rooms.length === 0 ? (

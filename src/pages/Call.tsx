@@ -2871,6 +2871,35 @@ function PeoplePanel({
         />
       </div>
 
+      {/* Raised hands queue (host/co-host view) */}
+      {isModerator && (() => {
+        const raised = (call.participants ?? []).filter((p) => p.handRaised && p.clientId !== call.clientId);
+        if (raised.length === 0) return null;
+        return (
+          <div className="border-b border-amber-400/20 bg-amber-400/5 p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-300">
+              <Hand className="size-3.5" /> Raised Hands · {raised.length}
+            </p>
+            <div className="space-y-1">
+              {raised.map((p) => (
+                <div key={p.clientId} className="flex items-center gap-2 rounded-lg bg-muted/50 px-2 py-1.5">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-xs">✋</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{p.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => void lowered({ code, clientId: p.clientId, raised: false })}
+                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    aria-label={`Lower ${p.name}'s hand`}
+                  >
+                    Lower
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {isModerator && waitingList !== undefined && waitingList.length > 0 && (
         <div className="border-b border-amber-400/20 bg-amber-400/5 p-3">
           <div className="mb-2 flex items-center justify-between">
