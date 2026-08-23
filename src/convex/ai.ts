@@ -72,7 +72,7 @@ function pickLlm(): {
     return {
       key: process.env.NVIDIA_API_KEY,
       baseUrl: "https://integrate.api.nvidia.com/v1",
-      model: "meta/muse-glimmer-30b",
+      model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       label: "nvidia",
     };
   return null;
@@ -96,10 +96,11 @@ async function llmChat(
     body: JSON.stringify({
       model: provider.model,
       messages,
-      temperature: 0.4,
-      // Room for reasoning models (e.g. NVIDIA's meta/muse-glimmer-30b) to
-      // finish thinking and then emit their final answer.
-      max_tokens: 4096,
+      temperature: 0.6,
+      top_p: 0.95,
+      // Reasoning budget for the nemotron reasoning model.
+      max_tokens: 65536,
+      reasoning_budget: 16384,
     }),
   });
   if (!res.ok) {
