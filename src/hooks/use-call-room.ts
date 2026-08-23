@@ -127,6 +127,57 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
 }
 
 /**
+ * Stable MediaStream registry for the P2P mesh.
+ *
+ * The problem: every time `setRemoteStreams` fires, React replaces the
+ * `MediaStream` reference in state. Any `<audio data-peer>` or `<video
+ * data-peer>` element that binds to the old reference loses playback because
+ * the browser unassigns the old stream from the media element. With
+ * React reconciling aggressively this leads to the classic "friend joins but
+ * I can't hear them" bug even though the tracks exist.
+ *
+ * The fix: keep a single `MediaStream` object per peer for the lifetime of
+ * the hook and only mark the React state dirty when the set of tracks
+ * actually changes. The `<audio>` and `<video>` renderers check `srcObject`
+ * in an effect and only reassign when the object identity truly changed, so
+ * playback never resets.
+ */
+const peerStreams = new Map<string, MediaStream>();
+let nextLocalStreamVersion = 0;
+
+function ensurePeerStream(peerId: string): MediaStream {
+  let stream = peerStreams.get(peerId);
+  if (!stream) {
+    stream = new MediaStream();
+    peerStreams.set(peerId, stream);
+  }
+  return stream;
+}
+
+function destroyPeerStream(peerId: string) {
+  const stream = peerStreams.get(peerId);
+  if (!stream) return;
+  for (const track of stream.getTracks()) {
+    track.stop();
+  }
+  peerStreams.delete(peerId);
+}
+
+function upsertTrack(
+  stream: MediaStream,
+  track: MediaStreamTrack,
+): boolean {
+  const existing = stream.getTracks().find((t) => t.id === track.id);
+  if (existing) return false;
+
+  // Replace any existing track of the same kind to avoid duplicates.
+  const stale = stream.getTracks().find((t) => t.kind === track.kind);
+  if (stale) stream.removeTrack(stale);
+  stream.addTrack(track);
+  return true;
+}
+
+/**
  * A peer-to-peer mesh call room with real media, signaling via Convex.
  * Adds: speaking detection, remote mic/cam state, network quality,
  * raise hand, reactions, live captions (Web Speech API), recording with
@@ -251,6 +302,7 @@ export function useCallRoom(
           return;
         }
         localStreamRef.current = stream;
+        nextLocalStreamVersion += 1;
         setLocalStream(stream);
       } catch {
         try {
@@ -260,6 +312,7 @@ export function useCallRoom(
             return;
           }
           localStreamRef.current = stream;
+          nextLocalStreamVersion += 1;
           setLocalStream(stream);
           setCamOn(false);
         } catch {
@@ -285,6 +338,7 @@ export function useCallRoom(
     pcRef.current.delete(peerId);
     streamRef.current.delete(peerId);
     pendingIceRef.current.delete(peerId);
+    destroyPeerStream(peerId);
     setRemoteStreams((prev) => {
       if (!(peerId in prev)) return prev;
       const next = { ...prev };
@@ -332,19 +386,23 @@ export function useCallRoom(
       };
 
       pc.ontrack = (event) => {
-        let stream = streamRef.current.get(peerId);
-        if (!stream) {
-          stream = new MediaStream();
-          streamRef.current.set(peerId, stream);
-        }
-        const tracks = event.streams[0]?.getTracks() ?? [event.track];
-        for (const track of tracks) {
-          if (!stream.getTracks().includes(track)) stream.addTrack(track);
+        const stream = ensurePeerStream(peerId);
+        let changed = false;
+
+        // Add the raw receiver track.
+        if (event.track) {
+          changed = upsertTrack(stream, event.track) || changed;
         }
 
-        // track mic/cam state from mute events on the receiver side
+        // The browser may bundle related tracks on the same event.
+        const bundled = event.streams[0]?.getTracks() ?? [];
+        for (const track of bundled) {
+          changed = upsertTrack(stream, track) || changed;
+        }
+
+        // Track mic/cam state from mute events on the receiver side.
         const states: TrackStates = { audio: false, video: false };
-        for (const track of tracks) {
+        for (const track of stream.getTracks()) {
           if (track.kind === "audio") {
             states.audio = true;
             track.onmute = () =>
@@ -364,7 +422,15 @@ export function useCallRoom(
           ...prev,
           [peerId]: { ...prev[peerId], ...states },
         }));
-        setRemoteStreams((prev) => ({ ...prev, [peerId]: stream! }));
+
+        // Only update React state when the object identity changed.
+        setRemoteStreams((prev) => {
+          if (prev[peerId] === stream) return prev;
+          return { ...prev, [peerId]: stream };
+        });
+        // Keep legacy map pointing at the same stable reference.
+        streamRef.current.set(peerId, stream);
+        void changed;
       };
 
       return pc;
@@ -405,6 +471,9 @@ export function useCallRoom(
     pcRef.current.clear();
     streamRef.current.clear();
     pendingIceRef.current.clear();
+    for (const peerId of Object.keys(remoteStreams)) {
+      destroyPeerStream(peerId);
+    }
     setRemoteStreams({});
     setSpeaking({});
     setQuality({});
@@ -738,6 +807,9 @@ export function useCallRoom(
       for (const pc of pcs.values()) pc.close();
       pcs.clear();
       streams.clear();
+      for (const peerId of Object.keys(peerStreams)) {
+        destroyPeerStream(peerId);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, clientId, leaveRoom, setRecordingState, recordingState?.mode]);
@@ -927,6 +999,7 @@ export function useCallRoom(
             current.addTrack(track);
             replacements.push({ kind: track.kind as "audio" | "video", track });
           }
+          nextLocalStreamVersion += 1;
           setLocalStream(current);
           for (const pc of pcRef.current.values()) {
             for (const { kind, track } of replacements) {
