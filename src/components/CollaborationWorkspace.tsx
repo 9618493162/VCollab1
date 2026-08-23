@@ -6,6 +6,7 @@ import {
   ChevronUp,
   ClipboardList,
   FileUp,
+  LinkIcon,
   MessageCircleQuestion,
   Pin,
   PinOff,
@@ -784,45 +785,128 @@ function QATab({
   );
 }
 
-// ─── Files Tab (lightweight placeholder — full panel is FileSharingPanel) ──
+// ─── Files Tab ──────────────────────────────────────────────
 
 function FilesTab({ code }: { code: string }) {
   const files = useQuery(api.supabaseData.listFiles, { code });
+  const links = useQuery(api.collab.getLinks, { code });
+  const addLink = useMutation(api.collab.addLink);
+  const removeLink = useMutation(api.collab.removeLink);
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [addingLink, setAddingLink] = useState(false);
+
+  const handleAddLink = async () => {
+    if (!linkUrl.trim() || addingLink) return;
+    setAddingLink(true);
+    try {
+      await addLink({ code, title: linkTitle.trim() || linkUrl.trim(), url: linkUrl.trim() });
+      setLinkTitle("");
+      setLinkUrl("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't add link");
+    } finally {
+      setAddingLink(false);
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
-        {files && files.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <FileUp className="mb-2 size-8 text-muted-foreground/40" />
-            <p className="text-xs text-muted-foreground">
-              No files shared yet
-            </p>
-            <p className="text-[10px] text-muted-foreground/60">
-              Share files through the meeting
-            </p>
-          </div>
-        )}
-
-        {files?.map((file) => (
-          <div
-            key={file._id}
-            className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 p-2.5"
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded bg-primary/10">
-              <FileIcon className="size-4 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium">{file.name}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {file.uploadedByName} •{" "}
-                {file.size < 1024 * 1024
-                  ? `${(file.size / 1024).toFixed(1)} KB`
-                  : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+        {/* Files */}
+        <div>
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/50">Files</p>
+          {files && files.length === 0 && (!links || links.length === 0) && (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <FileUp className="mb-2 size-8 text-muted-foreground/40" />
+              <p className="text-xs text-muted-foreground">
+                No files or links shared yet
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground/60">
+                Share files and links with your team
               </p>
             </div>
+          )}
+          {files?.map((file) => (
+            <div
+              key={file._id}
+              className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 p-2.5"
+            >
+              <div className="flex size-8 shrink-0 items-center justify-center rounded bg-primary/10">
+                <FileIcon className="size-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{file.name}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {file.uploadedByName} •{" "}
+                  {file.size < 1024 * 1024
+                    ? `${(file.size / 1024).toFixed(1)} KB`
+                    : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Shared Links */}
+        <div>
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/50">Links</p>
+          {links?.map((link) => (
+            <div
+              key={link._id}
+              className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 p-2.5 mb-1.5"
+            >
+              <div className="flex size-8 shrink-0 items-center justify-center rounded bg-primary/10">
+                <LinkIcon className="size-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate text-xs font-medium text-primary hover:underline"
+                >
+                  {link.title}
+                </a>
+                <p className="text-[10px] text-muted-foreground">{link.addedBy}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void removeLink({ code, linkId: link._id }).catch(() => {})}
+                className="size-6 shrink-0 rounded-full text-muted-foreground/50 hover:bg-muted hover:text-red-500"
+                aria-label="Remove link"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+
+          {/* Add link form */}
+          <div className="mt-2 flex gap-1.5">
+            <Input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://..."
+              className="h-8 flex-1 rounded-lg border-border/60 bg-muted/50 text-xs"
+              onKeyDown={(e) => { if (e.key === "Enter") void handleAddLink(); }}
+            />
+            <Input
+              value={linkTitle}
+              onChange={(e) => setLinkTitle(e.target.value)}
+              placeholder="Title"
+              className="h-8 w-24 rounded-lg border-border/60 bg-muted/50 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => void handleAddLink()}
+              disabled={!linkUrl.trim() || addingLink}
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              aria-label="Add link"
+            >
+              <Plus className="size-3.5" />
+            </button>
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );

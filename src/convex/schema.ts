@@ -295,6 +295,16 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_code", ["code"]),
 
+    // shared links for a meeting (Phase 6 §31)
+    sharedLinks: defineTable({
+      code: v.string(),
+      title: v.string(),
+      url: v.string(),
+      addedBy: v.string(), // display name of the person who added it
+      addedById: v.optional(v.id("users")),
+      createdAt: v.number(),
+    }).index("by_code", ["code"]),
+
     // live meeting polls (Phase 30). Votes live in `pollVotes`.
     polls: defineTable({
       code: v.string(),

@@ -215,3 +215,67 @@ export const deleteCard = mutation({
     await ctx.db.delete(card._id);
   },
 });
+
+// ─── Shared Links ───────────────────────────────────────────────────────
+
+/** Links shared in a meeting, newest first. */
+export const getLinks = query({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return [];
+    return await ctx.db
+      .query("sharedLinks")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .order("desc")
+      .take(50);
+  },
+});
+
+/** Add a shared link to the meeting. */
+export const addLink = mutation({
+  args: {
+    code: v.string(),
+    title: v.string(),
+    url: v.string(),
+  },
+  handler: async (ctx, { code, title, url }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to share links");
+    const normalized = normalizeCode(code);
+    const cleanTitle = title.trim().slice(0, 120);
+    if (cleanTitle === "") throw new Error("Give the link a title.");
+    const cleanUrl = url.trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) throw new Error("Please enter a valid URL.");
+    const me = await ctx.db.get(userId);
+    await ctx.db.insert("sharedLinks", {
+      code: normalized,
+      title: cleanTitle,
+      url: cleanUrl.slice(0, 2000),
+      addedBy: me?.name || "Someone",
+      addedById: userId,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Remove a shared link (author or host). */
+export const removeLink = mutation({
+  args: { code: v.string(), linkId: v.id("sharedLinks") },
+  handler: async (ctx, { code, linkId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in to remove links");
+    const normalized = normalizeCode(code);
+    const link = await ctx.db.get(linkId);
+    if (link === null || link.code !== normalized) throw new Error("Link not found.");
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    const isHost = room?.createdBy === userId;
+    const isAuthor = link.addedById === userId;
+    if (!isHost && !isAuthor)
+      throw new Error("Only the author or the host can remove this link.");
+    await ctx.db.delete(linkId);
+  },
+});
