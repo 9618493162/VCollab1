@@ -89,15 +89,14 @@ async function llmChat(
     headers: {
       authorization: `Bearer ${provider.key}`,
       "content-type": "application/json",
-      ...(provider.label === "openrouter"
-        ? { "HTTP-Referer": "https://vcollab.app", "X-Title": "VCollab" }
-        : {}),
+      Accept: "application/json",
     },
     body: JSON.stringify({
       model: provider.model,
       messages,
       temperature: 0.6,
       top_p: 0.95,
+      stream: false,
       // Reasoning budget for the nemotron reasoning model.
       max_tokens: 65536,
       reasoning_budget: 16384,
@@ -105,8 +104,10 @@ async function llmChat(
   });
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 401 || res.status === 403)
+      throw new Error("Invalid or expired NVIDIA_API_KEY. Get a new key at build.nvidia.com.");
     throw new Error(
-      `${provider.label} request failed (${res.status}): ${body.slice(0, 200)}`,
+      `NVIDIA API error (${res.status}): ${body.slice(0, 300)}`,
     );
   }
   const data = (await res.json()) as {
@@ -533,3 +534,45 @@ async function extractActionItems(transcript: string): Promise<string[]> {
     .filter(Boolean)
     .slice(0, 12);
 }
+
+/** Diagnostic: test whether the NVIDIA API key is set and working. */
+export const testAiConnection = action({
+  args: {},
+  handler: async () => {
+    const key = process.env.NVIDIA_API_KEY;
+    if (!key)
+      return { ok: false, error: "NVIDIA_API_KEY is not set in Convex environment variables." };
+
+    try {
+      const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${key}`,
+          "content-type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          messages: [{ role: "user", content: "Say hello in one word." }],
+          stream: false,
+          temperature: 0.6,
+          top_p: 0.95,
+          max_tokens: 100,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        return { ok: false, error: `NVIDIA API returned ${res.status}: ${body.slice(0, 300)}` };
+      }
+
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const reply = data.choices?.[0]?.message?.content ?? "";
+      return { ok: true, reply: reply.slice(0, 200) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+});

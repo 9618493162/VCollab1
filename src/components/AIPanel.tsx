@@ -71,10 +71,13 @@ export function AIPanel({
 
 function AssistantTab({ code }: { code: string }) {
   const ask = useAction(api.ai.askAssistant);
+  const testConn = useAction(api.ai.testAiConnection);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,6 +137,30 @@ function AssistantTab({ code }: { code: string }) {
               </div>
             </div>
             <div className="space-y-1.5">
+              <button
+                type="button"
+                disabled={testing}
+                onClick={async () => {
+                  setTesting(true);
+                  setTestResult(null);
+                  try {
+                    const r = await testConn();
+                    if (r.ok) setTestResult("✅ AI connected! " + r.reply);
+                    else setTestResult("❌ " + r.error);
+                  } catch (e) {
+                    setTestResult("❌ " + (e instanceof Error ? e.message : String(e)));
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+                className="flex w-full items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-left text-[11px] text-emerald-600 dark:text-emerald-400 transition-colors hover:bg-emerald-500/10"
+              >
+                <span>{testing ? "⏳" : "🔌"}</span>
+                <span>{testing ? "Testing connection..." : "Test AI Connection"}</span>
+              </button>
+              {testResult && (
+                <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-foreground/80 break-all">{testResult}</p>
+              )}
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/50">Or ask a question</p>
               {[
                 "What decisions were made?",
