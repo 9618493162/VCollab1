@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../convex/_generated/api";
-import { insertUser, makeTestClient, type TestClient } from "./convex-test-client";
+import { insertUser, joinPresence, makeTestClient, type TestClient } from "./convex-test-client";
 
 async function hostRoom(t: TestClient) {
   const hostId = await insertUser(t, "host@example.com", "Host");
@@ -29,6 +29,9 @@ describe("polls (Phase 30)", () => {
   it("creates a draft poll and lets participants vote once per choice", async () => {
     const t = makeTestClient();
     const { host, code } = await hostRoom(t);
+    // voting is restricted to live participants (verified presence rows)
+    await joinPresence(t, code, "c1", "Alice");
+    await joinPresence(t, code, "c2", "Bob");
 
     await host.mutation(api.polls.createPoll, {
       code,
@@ -101,6 +104,7 @@ describe("polls (Phase 30)", () => {
   it("multiple-choice polls let one voter pick several options", async () => {
     const t = makeTestClient();
     const { host, code } = await hostRoom(t);
+    await joinPresence(t, code, "c1", "Alice");
     await host.mutation(api.polls.createPoll, {
       code,
       title: "Pick topics",
@@ -144,6 +148,7 @@ describe("polls (Phase 30)", () => {
   it("host can delete a poll along with its votes", async () => {
     const t = makeTestClient();
     const { host, code } = await hostRoom(t);
+    await joinPresence(t, code, "c1", "Alice");
     await host.mutation(api.polls.createPoll, {
       code,
       title: "Temp",
@@ -168,6 +173,9 @@ describe("Q&A (Phase 31)", () => {
   it("anyone can ask and upvote; upvotes toggle", async () => {
     const t = makeTestClient();
     const { code } = await hostRoom(t);
+    // asking and upvoting require a live presence row
+    await joinPresence(t, code, "c1", "Alice");
+    await joinPresence(t, code, "c2", "Bob");
 
     await t.mutation(api.qa.askQuestion, {
       code,
@@ -192,6 +200,9 @@ describe("Q&A (Phase 31)", () => {
   it("only the author or the host can remove a question", async () => {
     const t = makeTestClient();
     const { code } = await hostRoom(t);
+    await joinPresence(t, code, "c1", "Alice");
+    // c9 is in the meeting but is neither author nor host
+    await joinPresence(t, code, "c9", "Mallory");
     await t.mutation(api.qa.askQuestion, {
       code,
       clientId: "c1",
@@ -211,6 +222,8 @@ describe("Q&A (Phase 31)", () => {
   it("host answers, pins, and deletes questions", async () => {
     const t = makeTestClient();
     const { host, code } = await hostRoom(t);
+    await joinPresence(t, code, "c1", "Alice");
+    await joinPresence(t, code, "c2", "Bob");
     await t.mutation(api.qa.askQuestion, {
       code,
       clientId: "c1",
