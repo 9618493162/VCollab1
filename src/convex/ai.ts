@@ -378,29 +378,24 @@ export const askAssistant = action({
     ]);
     const transcript = transcripts[0]?.content ?? "";
     const summary = summaries[0]?.content ?? "";
-    if (!transcript && !summary)
-      return {
-        answer:
-          "No transcript or summary for this meeting yet. Record and transcribe it first.",
-        grounded: false,
-      };
 
-    const context = [
+    const contextParts = [
       summary ? `## Summary\n${summary}` : "",
       transcript ? `## Transcript\n${transcript.slice(0, 28_000)}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    ].filter(Boolean);
+    const hasContext = contextParts.length > 0;
+    const context = contextParts.join("\n\n");
 
     const { text: answer } = await llmChat([
       {
         role: "system",
-        content:
-          "You are a meeting assistant. Answer ONLY from the provided meeting context. If the context doesn't contain the answer, say so plainly — never invent information.",
+        content: hasContext
+          ? "You are a meeting assistant. Answer ONLY from the provided meeting context. If the context doesn't contain the answer, say so plainly — never invent information."
+          : "You are a helpful meeting assistant. There is no transcript or summary available yet for this meeting. Answer the user's question helpfully based on general knowledge. Be concise.",
       },
-      { role: "user", content: `${context}\n\nQuestion: ${question}` },
+      { role: "user", content: hasContext ? `${context}\n\nQuestion: ${question}` : question },
     ]);
-    return { answer, grounded: true };
+    return { answer, grounded: hasContext };
   },
 });
 
