@@ -384,24 +384,32 @@ export default function Call() {
   const admitAllWaiting = useMutation(api.security.admitAllWaiting);
   const rejectParticipant = useMutation(api.security.rejectParticipant);
   const makeCoHost = useMutation(api.security.makeCoHost);
+  const removeCoHost = useMutation(api.security.removeCoHost);
   const muteAll = useMutation(api.security.muteAll);
   const sendAnnouncement = useMutation(api.announcements.send);
-  const announcements = useQuery(api.announcements.list, code ? { code, limit: 10 } : "skip");
+  // Announcements are meeting-scoped and participant-only: subscribe once
+  // we're actually in the room so the backend membership check passes.
+  const announcements = useQuery(
+    api.announcements.list,
+    code && entered ? { code, limit: 10, viewerClientId: call.clientId } : "skip",
+  );
   const isCoHost = meetingSettings?.coHosts?.includes(call.clientId) === true;
   const isModerator = isHost === true || isCoHost;
 
-  // Show host announcements as toasts
+  // Show host announcements as toasts — for EVERYONE in the meeting, not just
+  // the host. The sender recognizes their own message by user id (fromId is
+  // the host's user id, not a per-tab clientId).
   const prevAnnouncementCount = useRef(0);
   useEffect(() => {
-    if (!announcements || !isHost) return;
+    if (!announcements || !entered) return;
     if (announcements.length > prevAnnouncementCount.current && prevAnnouncementCount.current > 0) {
       const latest = announcements[0];
-      if (latest.fromId !== call.clientId) {
-        toast.info(`${latest.from}: ${latest.text}`);
+      if (latest.fromId !== user?._id) {
+        toast.info(`📢 ${latest.from}: ${latest.text}`);
       }
     }
     prevAnnouncementCount.current = announcements.length;
-  }, [announcements, isHost, call.clientId]);
+  }, [announcements, entered, user?._id]);
 
   // Toast notification when someone new enters the waiting room
   useEffect(() => {
@@ -583,33 +591,62 @@ export default function Call() {
     };
   }, [call.captions, translateTo, translateText]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — ONE global handler (the old duplicate made C fire
+  // camera AND chat, and R/P toggle twice, cancelling themselves out).
+  // Map: M mute · C/V camera · S share · H hand · R reactions ·
+  //       P people · T chat · A AI · ? shortcuts · Esc close.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts while typing in inputs
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      )
+        return;
       switch (e.key.toLowerCase()) {
         case "m":
+          if (!entered) return;
           e.preventDefault();
           call.toggleMic();
           break;
+        case "c":
         case "v":
+          if (!entered) return;
           e.preventDefault();
           call.toggleCam();
           break;
-        case "c":
+        case "s":
+          if (!entered) return;
           e.preventDefault();
-          setPanel((p) => (p === "chat" ? "none" : "chat"));
+          void call.toggleShare();
+          break;
+        case "h":
+          if (!entered) return;
+          e.preventDefault();
+          call.toggleHand();
+          break;
+        case "r":
+          e.preventDefault();
+          setShowReactions((v) => !v);
           break;
         case "p":
           e.preventDefault();
           setPanel((p) => (p === "people" ? "none" : "people"));
           break;
-        case "r":
+        case "t":
           e.preventDefault();
-          setShowReactions((v) => !v);
+          setPanel((p) => (p === "chat" ? "none" : "chat"));
+          break;
+        case "a":
+          e.preventDefault();
+          setPanel((p) => (p === "ai" ? "none" : "ai"));
+          break;
+        case "?":
+          e.preventDefault();
+          setShowShortcuts((v) => !v);
           break;
         case "escape":
           e.preventDefault();
@@ -623,7 +660,18 @@ export default function Call() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [call.toggleMic, call.toggleCam, panel, showReactions, showMobileMenu, showShortcuts, showInfo]);
+  }, [
+    entered,
+    call.toggleMic,
+    call.toggleCam,
+    call.toggleShare,
+    call.toggleHand,
+    panel,
+    showReactions,
+    showMobileMenu,
+    showShortcuts,
+    showInfo,
+  ]);
 
   const handleJoin = async () => {
     if (!displayName.trim()) {
@@ -742,54 +790,6 @@ export default function Call() {
       toast.error(error instanceof Error ? error.message : "Couldn't mute everyone.");
     }
   };
-
-  // meeting keyboard shortcuts (M/C/S/R/H/P/T/A/?). Ignored while typing.
-  useEffect(() => {
-    if (!entered) return;
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      )
-        return;
-      const key = event.key.toLowerCase();
-      if (key === "m") {
-        event.preventDefault();
-        call.toggleMic();
-      } else if (key === "c") {
-        event.preventDefault();
-        call.toggleCam();
-      } else if (key === "s") {
-        event.preventDefault();
-        void call.toggleShare();
-      } else if (key === "h") {
-        event.preventDefault();
-        call.toggleHand();
-      } else if (key === "r") {
-        event.preventDefault();
-        setShowReactions((v) => !v);
-      } else if (key === "p") {
-        event.preventDefault();
-        setPanel((p) => (p === "people" ? "none" : "people"));
-      } else if (key === "t") {
-        event.preventDefault();
-        setPanel((p) => (p === "chat" ? "none" : "chat"));
-      } else if (key === "a") {
-        event.preventDefault();
-        setPanel((p) => (p === "ai" ? "none" : "ai"));
-      } else if (key === "?") {
-        event.preventDefault();
-        setShowShortcuts((v) => !v);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entered]);
 
 
   // Lock body/html scroll during the meeting to prevent vertical shift
@@ -2105,6 +2105,13 @@ export default function Call() {
                       toast.error(error instanceof Error ? error.message : "Couldn't update co-host."),
                     )
                   }
+                  onRemoveCoHost={(clientId) =>
+                    void removeCoHost({ code, clientId }).then(
+                      () => toast.success("Co-host removed"),
+                      (error) =>
+                        toast.error(error instanceof Error ? error.message : "Couldn't update co-host."),
+                    )
+                  }
                   onTransferHost={(userId) => void handleTransferHost(userId)}
                   onSetTransferTarget={setTransferTarget}
                   onMuteAll={() => void handleMuteAll()}
@@ -2788,6 +2795,7 @@ function PeoplePanel({
   onAdmitAll,
   onReject,
   onMakeCoHost,
+  onRemoveCoHost,
   onTransferHost,
   onMuteAll,
   onSetTransferTarget,
@@ -2803,6 +2811,7 @@ function PeoplePanel({
   onAdmitAll: () => void;
   onReject: (clientId: string) => void;
   onMakeCoHost: (clientId: string) => void;
+  onRemoveCoHost: (clientId: string) => void;
   onTransferHost: (userId: Id<"users">) => void;
   onMuteAll: () => void;
   onSetTransferTarget: (target: { clientId: string; name: string; userId?: Id<"users"> } | null) => void;
@@ -3012,7 +3021,7 @@ function PeoplePanel({
                 {isHost && !self && coHostIds.has(p.clientId) && (
                   <button
                     type="button"
-                    onClick={() => onMakeCoHost(p.clientId)}
+                    onClick={() => onRemoveCoHost(p.clientId)}
                     title="Remove co-host"
                     aria-label="Remove co-host"
                     className="flex size-7 items-center justify-center rounded-full text-indigo-600/70 dark:text-indigo-400/70 transition-colors hover:bg-red-500/20 hover:text-red-500 dark:hover:text-red-400"

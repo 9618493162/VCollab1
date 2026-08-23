@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { requireMeetingMember } from "./access";
 import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { normalizeCode } from "./rooms";
 
@@ -29,10 +30,15 @@ export const askQuestion = mutation({
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
     const clean = text.trim().slice(0, 500);
     if (clean === "") throw new Error("Write your question first.");
+
+    // Only admitted participants can ask. Author identity comes from the
+    // verified presence row — the client-supplied name is never trusted.
+    const member = await requireMeetingMember(ctx, normalized, clientId);
+
     await ctx.db.insert("qaQuestions", {
       code: normalized,
-      clientId: clientId.slice(0, 80),
-      authorName: authorName.trim().slice(0, 40) || "Someone",
+      clientId: member.clientId,
+      authorName: member.name || "Someone",
       text: clean,
       upvoters: [],
       answered: false,
@@ -50,10 +56,13 @@ export const toggleUpvote = mutation({
     const question = await ctx.db.get(questionId);
     if (question === null) throw new Error("Question not found.");
     if (question.code !== normalized) throw new Error("Question not found.");
-    if (clientId === "") throw new Error("Join the meeting to upvote.");
-    const upvoters = question.upvoters.includes(clientId)
-      ? question.upvoters.filter((id) => id !== clientId)
-      : [...question.upvoters, clientId];
+
+    // Upvotes are keyed to a real participant's per-tab id, so nobody can
+    // inflate a question by voting under fabricated client ids.
+    const member = await requireMeetingMember(ctx, normalized, clientId);
+    const upvoters = question.upvoters.includes(member.clientId)
+      ? question.upvoters.filter((id) => id !== member.clientId)
+      : [...question.upvoters, member.clientId];
     await ctx.db.patch(questionId, { upvoters });
   },
 });
@@ -66,13 +75,13 @@ export const removeQuestion = mutation({
     const question = await ctx.db.get(questionId);
     if (question === null) throw new Error("Question not found.");
     if (question.code !== normalized) throw new Error("Question not found.");
+    const isAuthor = question.clientId === (await requireMeetingMember(ctx, normalized, clientId)).clientId;
     const userId = await getAuthUserId(ctx);
     const room = await ctx.db
       .query("rooms")
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .first();
     const isHost = userId !== null && room !== null && room.createdBy === userId;
-    const isAuthor = question.clientId === clientId;
     if (!isHost && !isAuthor)
       throw new Error("Only the author or the host can remove this question.");
     await ctx.db.delete(questionId);

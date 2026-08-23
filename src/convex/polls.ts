@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { requireMeetingMember } from "./access";
 import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { normalizeCode } from "./rooms";
 
@@ -143,16 +144,23 @@ export const setPollVote = mutation({
     const normalized = normalizeCode(code);
     const poll = await ctx.db.get(pollId);
     if (poll === null) throw new Error("Poll not found.");
+    if (poll.code !== normalized) throw new Error("Poll not found.");
     if (!poll.launched) throw new Error("This poll hasn't started yet.");
     if (poll.closed) throw new Error("This poll is closed.");
     if (choice < 0 || choice >= poll.options.length)
       throw new Error("That option doesn't exist.");
-    if (voter === "") throw new Error("Join the meeting to vote.");
+
+    // Only current, admitted participants can vote. The voter key comes
+    // from the caller's own verified presence row (their unguessable per-tab
+    // clientId), never from the client-supplied `voter` string — otherwise a
+    // participant could inflate results by voting under made-up names.
+    const member = await requireMeetingMember(ctx, normalized, voter);
+    const voterKey = member.clientId;
 
     const mine = await ctx.db
       .query("pollVotes")
       .withIndex("by_poll", (q) => q.eq("pollId", pollId))
-      .filter((q) => q.eq(q.field("voter"), voter))
+      .filter((q) => q.eq(q.field("voter"), voterKey))
       .collect();
 
     if (poll.type === "single") {
@@ -162,7 +170,7 @@ export const setPollVote = mutation({
         await ctx.db.insert("pollVotes", {
           pollId,
           code: normalized,
-          voter,
+          voter: voterKey,
           choice,
           createdAt: Date.now(),
         });
@@ -176,7 +184,7 @@ export const setPollVote = mutation({
       await ctx.db.insert("pollVotes", {
         pollId,
         code: normalized,
-        voter,
+        voter: voterKey,
         choice,
         createdAt: Date.now(),
       });

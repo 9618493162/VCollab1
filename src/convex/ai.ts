@@ -8,6 +8,7 @@
 //   Transcription: DEEPGRAM_API_KEY (primary) → ASSEMBLYAI_API_KEY (fallback)
 //   LLM features (summary, action items, assistant, translation, minutes):
 //     NVIDIA_API_KEY → GROQ_API_KEY → OPENROUTER_API_KEY → OPENAI_API_KEY
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { action, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
@@ -43,7 +44,18 @@ async function loadAiData(
   code: string,
   kind: string,
 ): Promise<{ content?: string; items?: string[] }[]> {
-  return await ctx.runQuery(api.aiData.getAiData, { code, kind });
+  // Access is verified by requireMeetingAccess before this runs.
+  return await ctx.runQuery(internal.aiData.getAiDataUnverified, { code, kind });
+}
+
+/** Every meeting-scoped AI feature verifies the caller is the host or a
+ *  current participant before touching that meeting's transcript/artifacts. */
+async function requireMeetingAccess(ctx: ActionCtx, code: string) {
+  const userId = await getAuthUserId(ctx);
+  await ctx.runQuery(internal.aiData.assertAiAccess, {
+    code,
+    userId: userId ?? null,
+  });
 }
 
 const LLM_NOT_CONFIGURED =
@@ -144,6 +156,7 @@ export const transcribeMeeting = action({
   handler: async (ctx, { code, storageId }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("Invalid meeting code.");
+    await requireMeetingAccess(ctx, normalized);
     const deepgramKey = process.env.DEEPGRAM_API_KEY;
     const assemblyKey = process.env.ASSEMBLYAI_API_KEY;
     if (!deepgramKey && !assemblyKey)
@@ -321,6 +334,7 @@ export const summarizeTranscript = action({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const normalized = normalizeCode(code);
+    await requireMeetingAccess(ctx, normalized);
 
     const latest = await loadAiData(ctx, normalized, "transcript");
     const transcript = latest[0]?.content ?? "";
@@ -369,6 +383,7 @@ export const askAssistant = action({
   args: { code: v.string(), question: v.string() },
   handler: async (ctx, { code, question }) => {
     const normalized = normalizeCode(code);
+    await requireMeetingAccess(ctx, normalized);
     if (!pickLlm())
       return {
         answer:
@@ -435,6 +450,7 @@ export const generateMinutes = action({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const normalized = normalizeCode(code);
+    await requireMeetingAccess(ctx, normalized);
     const provider = pickLlm();
 
     const [transcripts, agenda] = await Promise.all([

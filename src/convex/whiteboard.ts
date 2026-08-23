@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, MutationCtx, QueryCtx, query } from "./_generated/server";
+import { requireMeetingMember } from "./access";
 import { normalizeCode } from "./rooms";
 
 const MAX_POINTS = 2000;
@@ -30,10 +31,12 @@ export const saveStroke = mutation({
       }),
     ),
   },
-  handler: async (ctx, { code, clientId, name, color, width, highlighter, points }) => {
-    const normalized = normalizeCode(code);
+  handler: async (ctx, args) => {
+    const normalized = normalizeCode(args.code);
     if (normalized === "") throw new Error("Meeting not found.");
-    if (clientId === "") throw new Error("Join the meeting to draw.");
+
+    // Validate shape first so callers get the most specific error.
+    const { clientId, name, color, width, highlighter, points } = args;
     const clean = points.filter(
       (p) => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1000 && p.y >= 0 && p.y <= 600,
     );
@@ -41,6 +44,10 @@ export const saveStroke = mutation({
     if (clean.length > MAX_POINTS) throw new Error("That stroke is too long.");
     if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Invalid color.");
     if (width < 1 || width > 12) throw new Error("Invalid stroke width.");
+
+    // Only admitted participants can draw; stroke attribution (clientId +
+    // display name) comes from the verified presence row, never client input.
+    const member = await requireMeetingMember(ctx, normalized, clientId);
 
     // keep the board from growing without bound
     const count = await ctx.db
@@ -55,7 +62,7 @@ export const saveStroke = mutation({
     await ctx.db.insert("whiteboardStrokes", {
       code: normalized,
       clientId,
-      name: name.trim().slice(0, 40) || "Guest",
+      name: member.name.trim().slice(0, 40) || "Guest",
       color,
       width,
       highlighter,

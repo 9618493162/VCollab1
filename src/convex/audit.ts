@@ -1,9 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
 
-/** Record an audit log entry. Can be called from any mutation. */
-export const log = mutation({
+// Audit writes are append-only and must never be callable from the browser.
+// Server mutations write entries directly via ctx.db.insert; this internal
+// mutation exists for callers that need an id (none today) — either way,
+// clients cannot forge audit records.
+export const log = internalMutation({
   args: {
     action: v.string(),
     actorId: v.optional(v.id("users")),
@@ -25,7 +28,25 @@ export const log = mutation({
   },
 });
 
-/** List recent audit log entries (admin/workspace owner only). */
+/** List recent audit log entries (workspace owners/admins only).
+ *
+ *  The audit trail is compliance data: it is never readable by ordinary
+ *  members or unauthenticated callers. Viewers must hold an owner/admin
+ *  role in at least one workspace — the same rule the Admin page gates on.
+ */
+async function requireAuditViewer(ctx: QueryCtx) {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) return null;
+  const memberships = await ctx.db
+    .query("workspaceMembers")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  const isAdmin = memberships.some(
+    (m) => m.role === "owner" || m.role === "admin",
+  );
+  return isAdmin ? userId : null;
+}
+
 export const list = query({
   args: {
     limit: v.optional(v.number()),
@@ -36,8 +57,7 @@ export const list = query({
     before: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return [];
+    if ((await requireAuditViewer(ctx)) === null) return [];
 
     const limit = Math.min(args.limit ?? 50, 100);
     let q = ctx.db.query("auditLog").withIndex("by_time");
@@ -52,7 +72,7 @@ export const list = query({
   },
 });
 
-/** Count audit entries for a given filter. */
+/** Count audit entries for a given filter (same access rule as `list`). */
 export const count = query({
   args: {
     action: v.optional(v.string()),
@@ -61,8 +81,7 @@ export const count = query({
     after: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return 0;
+    if ((await requireAuditViewer(ctx)) === null) return 0;
 
     let q = ctx.db.query("auditLog").withIndex("by_time");
     if (args.after) q = q.filter((s) => s.gt(s.field("createdAt"), args.after!));

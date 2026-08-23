@@ -1,10 +1,33 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { isMeetingMemberOrHost } from "./access";
 import { normalizeCode } from "./rooms";
 
-/** Latest AI artifacts for a meeting + kind, newest first. */
+/** Latest AI artifacts for a meeting + kind, newest first.
+ *
+ *  Meeting data is only readable by the host and current participants:
+ *  anyone else gets an empty list, never the content.
+ */
 export const getAiData = query({
+  args: { code: v.string(), kind: v.string() },
+  handler: async (ctx, { code, kind }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") return [];
+    const userId = await getAuthUserId(ctx);
+    if (!(await isMeetingMemberOrHost(ctx, normalized, userId))) return [];
+    return await ctx.db
+      .query("aiData")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .filter((q) => q.eq(q.field("kind"), kind))
+      .order("desc")
+      .take(5);
+  },
+});
+
+/** Internal: same read without an auth check — server actions call this
+ *  after verifying access themselves via assertAiAccess. */
+export const getAiDataUnverified = internalQuery({
   args: { code: v.string(), kind: v.string() },
   handler: async (ctx, { code, kind }) => {
     const normalized = normalizeCode(code);
@@ -15,6 +38,20 @@ export const getAiData = query({
       .filter((q) => q.eq(q.field("kind"), kind))
       .order("desc")
       .take(5);
+  },
+});
+
+/** Internal: authorization gate for AI node-actions. The action resolves the
+ *  caller's identity with getAuthUserId and passes it here; only the meeting
+ *  host or a current participant may run AI features against a meeting. */
+export const assertAiAccess = internalQuery({
+  args: { code: v.string(), userId: v.union(v.id("users"), v.null()) },
+  handler: async (ctx, { code, userId }) => {
+    if (!(await isMeetingMemberOrHost(ctx, code, userId)))
+      throw new Error(
+        "You don't have access to this meeting's AI features. Join the meeting first.",
+      );
+    return true;
   },
 });
 

@@ -783,6 +783,10 @@ export const endMeeting = mutation({
     if (room.createdBy !== userId)
       throw new Error("Only the host can end the meeting.");
 
+    // Idempotent: a double-click or retried request must not error out or
+    // re-run cleanup. An already-ended meeting simply stays ended.
+    if (room.status === "ended") return;
+
     const now = Date.now();
     const cutoff = now - 45_000; // only count live presence rows
     const present = await ctx.db
