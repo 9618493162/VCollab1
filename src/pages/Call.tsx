@@ -395,6 +395,9 @@ export default function Call() {
   const removeCoHost = useMutation(api.security.removeCoHost);
   const muteAll = useMutation(api.security.muteAll);
   const sendAnnouncement = useMutation(api.announcements.send);
+  // Live captions → backend transcript so the AI assistant can see meeting
+  // content. Batched every 20s to keep Convex writes reasonable.
+  const appendLiveTranscript = useMutation(api.aiData.appendLiveTranscript);
   // Announcements are meeting-scoped and participant-only: subscribe once
   // we're actually in the room so the backend membership check passes.
   const announcements = useQuery(
@@ -418,6 +421,38 @@ export default function Call() {
     }
     prevAnnouncementCount.current = announcements.length;
   }, [announcements, entered, user?._id]);
+
+  // ---- live captions → backend transcript (batched every 20s) ----
+  // Only the local browser captions this client hears (Web Speech API) are
+  // uploaded; they give the AI assistant real meeting content to ground on.
+  const savedCaptionCount = useRef(0);
+  const captionBufferRef = useRef<string[]>([]);
+  const captions = call.captions ?? [];
+  useEffect(() => {
+    if (captions.length > savedCaptionCount.current) {
+      for (let i = savedCaptionCount.current; i < captions.length; i++) {
+        captionBufferRef.current.push(captions[i]);
+      }
+      savedCaptionCount.current = captions.length;
+    }
+  }, [captions]);
+  useEffect(() => {
+    if (!entered || !call.captionsEnabled || !code) return;
+    const flush = () => {
+      const batch = captionBufferRef.current;
+      if (batch.length === 0) return;
+      captionBufferRef.current = [];
+      void appendLiveTranscript({ code, lines: batch }).catch(() => {
+        // Non-fatal: captions keep flowing locally; retry on next tick.
+        captionBufferRef.current = [...batch, ...captionBufferRef.current];
+      });
+    };
+    const timer = setInterval(flush, 20_000);
+    return () => {
+      clearInterval(timer);
+      flush(); // flush remaining on unmount/disable
+    };
+  }, [entered, call.captionsEnabled, code, appendLiveTranscript]);
 
   // Toast notification when someone new enters the waiting room
   useEffect(() => {

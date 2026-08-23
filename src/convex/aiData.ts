@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { isMeetingMemberOrHost } from "./access";
 import { normalizeCode } from "./rooms";
 
@@ -123,5 +123,54 @@ export const storeAiData = internalMutation({
       .order("desc")
       .collect();
     for (const row of rows.slice(5)) await ctx.db.delete(row._id);
+  },
+});
+
+const LIVE_MODEL = "live-captions";
+
+/** Append live caption lines to the meeting's running live transcript.
+ *
+ *  Called in batches from the client (every ~20s while captions are on) so
+ *  the AI assistant can answer questions about what was said in the meeting.
+ *  Only current meeting participants may write.
+ */
+export const appendLiveTranscript = mutation({
+  args: { code: v.string(), lines: v.array(v.string()) },
+  handler: async (ctx, { code, lines }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") throw new Error("Invalid meeting code.");
+    const userId = await getAuthUserId(ctx);
+    if (!(await isMeetingMemberOrHost(ctx, normalized, userId)))
+      throw new Error("You don't have access to this meeting.");
+
+    const clean = lines
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .slice(0, 40); // cap per call
+    if (clean.length === 0) return;
+
+    // Find the running live transcript doc for this meeting.
+    const existing = await ctx.db
+      .query("aiData")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .filter((q) => q.eq(q.field("kind"), "transcript"))
+      .order("desc")
+      .collect();
+    const live = existing.find((row) => row.model === LIVE_MODEL);
+
+    const addition = clean.join("\n");
+    if (live) {
+      // Cap the live transcript at ~40k chars to bound growth.
+      const merged = `${live.content ?? ""}\n${addition}`.slice(-40_000);
+      await ctx.db.patch(live._id, { content: merged, createdAt: Date.now() });
+    } else {
+      await ctx.db.insert("aiData", {
+        code: normalized,
+        kind: "transcript",
+        content: addition,
+        model: LIVE_MODEL,
+        createdAt: Date.now(),
+      });
+    }
   },
 });
