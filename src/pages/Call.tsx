@@ -93,6 +93,7 @@ import { QAPanel } from "@/components/QAPanel";
 import { AgendaPanel } from "@/components/AgendaPanel";
 import { BreakoutsPanel } from "@/components/BreakoutsPanel";
 import { WhiteboardOverlay } from "@/components/WhiteboardOverlay";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
@@ -1699,20 +1700,28 @@ export default function Call() {
               </ControlButton>
               {showReactions && (
                 <>
-                  {/* backdrop to close on outside click */}
-                  <div className="fixed inset-0 z-50" onClick={() => setShowReactions(false)} />
-                  <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 flex flex-wrap justify-center gap-1 rounded-2xl border border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl max-w-[280px] sm:max-w-none">
-                    {REACTION_EMOJIS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => fireBurst(emoji)}
-                        className="flex size-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-125 hover:bg-muted active:scale-90"
+                  {createPortal(
+                    <>
+                      {/* backdrop to close on outside click */}
+                      <div className="fixed inset-0 z-50" onClick={() => setShowReactions(false)} style={{ background: 'rgba(0,0,0,0.3)' }} />
+                      <div
+                        className="flex flex-wrap justify-center gap-1 rounded-2xl border border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl max-w-[280px] sm:max-w-none"
+                        style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', zIndex: 60 }}
                       >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
+                        {REACTION_EMOJIS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => fireBurst(emoji)}
+                            className="flex size-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-125 hover:bg-muted active:scale-90"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </>,
+                    document.body,
+                  )}
                 </>
               )}
             </div>
