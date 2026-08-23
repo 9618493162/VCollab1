@@ -294,10 +294,12 @@ export const sendReaction = mutation({
       if (hostRow?.clientId !== clientId)
         throw new Error("Reactions are disabled by the host.");
     }
+    // Derive name from presence row to prevent spoofed reactions.
+    const safeName = pres.name.trim().slice(0, 40) || "Someone";
     await ctx.db.insert("reactions", {
       code: normalized,
       emoji: emoji.slice(0, 8),
-      name: name.trim().slice(0, 40) || "Someone",
+      name: safeName,
       createdAt: Date.now(),
     });
     const cutoff = Date.now() - REACTION_WINDOW_MS;
@@ -515,6 +517,13 @@ export const sendMessage = mutation({
   handler: async (ctx, { code, from, name, text }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("That meeting code doesn't look right.");
+    // Verify sender is actually present in this meeting (prevents spoofed
+    // messages from users who only know the meeting code).
+    const pres = await findPresence(ctx, normalized, from);
+    if (pres === null) throw new Error("You're not in this meeting.");
+    // Derive the display name from the presence row so callers can't
+    // impersonate other participants.
+    const safeName = pres.name.trim().slice(0, 40) || "Guest";
     const clean = text.trim().slice(0, 500);
     if (clean === "") throw new Error("Message can't be empty.");
     const settings = await getMeetingSettings(ctx, normalized);
@@ -530,7 +539,7 @@ export const sendMessage = mutation({
     await ctx.db.insert("messages", {
       code: normalized,
       from,
-      name: name.trim().slice(0, 40) || "Guest",
+      name: safeName,
       text: clean,
       createdAt: Date.now(),
     });
