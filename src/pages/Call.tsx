@@ -93,8 +93,8 @@ import { QAPanel } from "@/components/QAPanel";
 import { AgendaPanel } from "@/components/AgendaPanel";
 import { BreakoutsPanel } from "@/components/BreakoutsPanel";
 import { WhiteboardOverlay } from "@/components/WhiteboardOverlay";
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -1688,44 +1688,38 @@ export default function Call() {
             </ControlButton>
 
             {/* reactions */}
-            <div className="relative">
-              <ControlButton
-                active={showReactions}
-                activeClass="bg-foreground text-background"
-                inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
-                onClick={() => setShowReactions((v) => !v)}
-                label="Reactions"
+            <Popover open={showReactions} onOpenChange={setShowReactions}>
+              <PopoverTrigger asChild>
+                <ControlButton
+                  active={showReactions}
+                  activeClass="bg-foreground text-background"
+                  inactiveClass="bg-foreground/10 text-foreground hover:bg-foreground/20"
+                  onClick={() => {}}
+                  label="Reactions"
+                >
+                  <Sparkles className="size-5" />
+                </ControlButton>
+              </PopoverTrigger>
+              <PopoverContent
+                side="top"
+                align="center"
+                sideOffset={12}
+                className="w-auto rounded-2xl border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl z-[99999]"
               >
-                <Sparkles className="size-5" />
-              </ControlButton>
-              {showReactions && (
-                <>
-                  {createPortal(
-                    <>
-                      {/* backdrop to close on outside click */}
-                      <div className="fixed inset-0 z-50" onClick={() => setShowReactions(false)} style={{ background: 'rgba(0,0,0,0.3)' }} />
-                      <div
-                        className="flex flex-wrap justify-center gap-1 rounded-2xl border border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl max-w-[280px] sm:max-w-none"
-                        style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', zIndex: 60 }}
-                      >
-                        {REACTION_EMOJIS.map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => fireBurst(emoji)}
-                            className="flex size-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-125 hover:bg-muted active:scale-90"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    </>,
-                    document.body,
-                  )}
-                </>
-              )}
-            </div>
-
+                <div className="flex flex-wrap justify-center gap-1">
+                  {REACTION_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => fireBurst(emoji)}
+                      className="flex size-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-125 hover:bg-muted active:scale-90"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             {/* captions */}
             <ControlButton
               active={call.captionsEnabled}
