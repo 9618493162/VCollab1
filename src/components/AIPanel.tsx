@@ -212,9 +212,20 @@ function AssistantTab({ code }: { code: string }) {
 
 function TranscriptTab({ call }: { call: ReturnType<typeof useCallRoom> }) {
   const endRef = useRef<HTMLDivElement>(null);
+  // Record the wall-clock time each finalized caption arrives so the
+  // transcript shows when speech actually happened, not when React renders.
+  const captionTimesRef = useRef<string[]>([]);
+  const prevLenRef = useRef(0);
+  const caps = call.captions ?? [];
+  if (caps.length > prevLenRef.current) {
+    // New captions arrived — stamp them.
+    const now = new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    for (let i = prevLenRef.current; i < caps.length; i++) captionTimesRef.current[i] = now;
+    prevLenRef.current = caps.length;
+  }
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [call.captions?.length]);
+  }, [caps.length]);
 
   if (!call.captionsEnabled) {
     return (
@@ -233,16 +244,13 @@ function TranscriptTab({ call }: { call: ReturnType<typeof useCallRoom> }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
-        {call.captions && call.captions.length > 0 ? (
-          call.captions.map((c, i) => {
-            const time = new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-            return (
+        {caps.length > 0 ? (
+          caps.map((c, i) => (
               <div key={i} className="group">
-                <p className="text-[10px] font-mono text-muted-foreground/50 mb-0.5">{time}</p>
+                <p className="text-[10px] font-mono text-muted-foreground/50 mb-0.5">{captionTimesRef.current[i] ?? ""}</p>
                 <p className="text-xs leading-relaxed text-foreground/80">{c}</p>
               </div>
-            );
-          })
+            ))
         ) : (
           <div className="flex flex-col items-center justify-center pt-12 text-center">
             <div className="relative mb-3">
