@@ -94,7 +94,7 @@ function AssistantTab({ code }: { code: string }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (/not configured|isn\'t configured|no.*key|api.*key/i.test(msg)) {
-        setError("AI Assistant isn\'t available. Configure an AI provider (NVIDIA, Groq, OpenRouter, or OpenAI) in the project Keys tab to enable meeting intelligence.");
+        setError("AI Assistant isn't available. Add NVIDIA_API_KEY in the project Keys tab to enable meeting intelligence.");
       } else {
         setError(msg || "AI couldn\'t complete this request. Please try again.");
       }

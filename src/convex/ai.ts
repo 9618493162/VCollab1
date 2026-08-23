@@ -7,7 +7,7 @@
 // Providers:
 //   Transcription: DEEPGRAM_API_KEY (primary) → ASSEMBLYAI_API_KEY (fallback)
 //   LLM features (summary, action items, assistant, translation, minutes):
-//     NVIDIA_API_KEY → GROQ_API_KEY → OPENROUTER_API_KEY → OPENAI_API_KEY
+//     NVIDIA_API_KEY (meta/muse-glimmer-30b via NVIDIA NIM)
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { action, type ActionCtx } from "./_generated/server";
@@ -59,9 +59,9 @@ async function requireMeetingAccess(ctx: ActionCtx, code: string) {
 }
 
 const LLM_NOT_CONFIGURED =
-  "AI isn't configured — add NVIDIA_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.";
+  "AI isn't configured — add NVIDIA_API_KEY in the project Keys tab.";
 
-/** Pick the first available LLM provider: NVIDIA → Groq → OpenRouter → OpenAI. */
+/** Return the NVIDIA NIM provider config, or null if the key is missing. */
 function pickLlm(): {
   key: string;
   baseUrl: string;
@@ -74,27 +74,6 @@ function pickLlm(): {
       baseUrl: "https://integrate.api.nvidia.com/v1",
       model: "meta/muse-glimmer-30b",
       label: "nvidia",
-    };
-  if (process.env.GROQ_API_KEY)
-    return {
-      key: process.env.GROQ_API_KEY,
-      baseUrl: "https://api.groq.com/openai/v1",
-      model: "llama-3.3-70b-versatile",
-      label: "groq",
-    };
-  if (process.env.OPENROUTER_API_KEY)
-    return {
-      key: process.env.OPENROUTER_API_KEY,
-      baseUrl: "https://openrouter.ai/api/v1",
-      model: "openai/gpt-4o-mini",
-      label: "openrouter",
-    };
-  if (process.env.OPENAI_API_KEY)
-    return {
-      key: process.env.OPENAI_API_KEY,
-      baseUrl: "https://api.openai.com/v1",
-      model: "gpt-4o-mini",
-      label: "openai",
     };
   return null;
 }
@@ -387,7 +366,7 @@ export const askAssistant = action({
     if (!pickLlm())
       return {
         answer:
-          "The AI assistant isn't configured — add NVIDIA_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in the project Keys tab.",
+          "The AI assistant isn't configured — add NVIDIA_API_KEY in the project Keys tab to enable meeting intelligence.",
         grounded: false,
       };
 
