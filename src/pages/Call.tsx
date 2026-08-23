@@ -1700,8 +1700,8 @@ export default function Call() {
               {showReactions && (
                 <>
                   {/* backdrop to close on outside click */}
-                  <div className="fixed inset-0 z-20" onClick={() => setShowReactions(false)} />
-                  <div className="absolute bottom-14 left-1/2 z-30 flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-2xl border border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl max-w-[280px] sm:max-w-none">
+                  <div className="fixed inset-0 z-50" onClick={() => setShowReactions(false)} />
+                  <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 flex flex-wrap justify-center gap-1 rounded-2xl border border-border/60 bg-background/95 p-2 shadow-2xl backdrop-blur-2xl max-w-[280px] sm:max-w-none">
                     {REACTION_EMOJIS.map((emoji) => (
                       <button
                         key={emoji}

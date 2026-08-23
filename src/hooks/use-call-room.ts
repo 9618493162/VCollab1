@@ -1071,8 +1071,12 @@ export function useCallRoom(
   );
 
   const fireReaction = useCallback(
-    (emoji: string) => {
-      void sendReaction({ code, clientId, emoji, name });
+    async (emoji: string) => {
+      try {
+        await sendReaction({ code, clientId, emoji, name });
+      } catch {
+        // reaction silently failed — local optimistic display still shows
+      }
     },
     [clientId, code, name, sendReaction],
   );
