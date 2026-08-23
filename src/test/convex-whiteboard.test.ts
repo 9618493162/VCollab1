@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../convex/_generated/api";
-import { insertUser, makeTestClient, type TestClient } from "./convex-test-client";
+import { insertUser, joinPresence, makeTestClient, type TestClient } from "./convex-test-client";
 
 async function hostRoom(t: TestClient) {
   const hostId = await insertUser(t, "host@example.com", "Host");
@@ -18,6 +18,8 @@ describe("whiteboard (Phase 56)", () => {
   it("saves strokes with valid data and rejects bad ones", async () => {
     const t = makeTestClient();
     const { code } = await hostRoom(t);
+    // strokes are only accepted from live, admitted participants
+    await joinPresence(t, code, "c1", "Alice");
 
     await t.mutation(api.whiteboard.saveStroke, {
       code,
@@ -75,6 +77,7 @@ describe("whiteboard (Phase 56)", () => {
     const t = makeTestClient();
     const { host, code } = await hostRoom(t);
     const otherCode = await host.mutation(api.rooms.createRoom);
+    await joinPresence(t, code, "c1", "Alice");
 
     await t.mutation(api.whiteboard.saveStroke, {
       code,
@@ -104,6 +107,8 @@ describe("whiteboard (Phase 56)", () => {
   it("only the author or the host can delete a stroke", async () => {
     const t = makeTestClient();
     const { host, code } = await hostRoom(t);
+    await joinPresence(t, code, "c1", "Alice");
+    await joinPresence(t, code, "c3", "Carol");
     await t.mutation(api.whiteboard.saveStroke, {
       code,
       clientId: "c1",
@@ -144,6 +149,7 @@ describe("whiteboard (Phase 56)", () => {
     const { host, code } = await hostRoom(t);
     const otherId = await insertUser(t, "other@example.com", "Other");
     const other = t.withIdentity({ subject: otherId });
+    await joinPresence(t, code, "c1", "Alice");
 
     await t.mutation(api.whiteboard.saveStroke, {
       code,

@@ -25,3 +25,28 @@ export async function insertUser(
 ): Promise<Id<"users">> {
   return t.run((ctx) => ctx.db.insert("users", { name, email, isAnonymous: false }));
 }
+
+/**
+ * Simulate a participant having joined a meeting by inserting their live
+ * presence row directly. Mutations guarded by `requireMeetingMember` (polls,
+ * Q&A, whiteboard, …) only accept calls from clientIds with such a row.
+ */
+export async function joinPresence(
+  t: TestClient,
+  code: string,
+  clientId: string,
+  name = clientId,
+): Promise<void> {
+  const now = Date.now();
+  await t.run((ctx) =>
+    ctx.db.insert("presence", {
+      code,
+      clientId,
+      name,
+      joinedAt: now,
+      lastSeen: now,
+      sharing: false,
+      waiting: false,
+    }),
+  );
+}
