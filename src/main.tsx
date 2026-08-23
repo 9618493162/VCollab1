@@ -29,6 +29,7 @@ import WorkspaceDetail from "./pages/WorkspaceDetail";
 import Messages from "./pages/Messages";
 import Help from "./pages/Help";
 import Admin from "./pages/Admin";
+import Contacts from "./pages/Contacts";
 import NotFound from "./pages/NotFound";
 import { CommandPalette } from "./components/CommandPalette";
 import { OnboardingWizard } from "./components/OnboardingWizard";
@@ -229,6 +230,14 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <Help />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/contacts"
+                element={
+                  <RequireAuth>
+                    <Contacts />
                   </RequireAuth>
                 }
               />

@@ -487,6 +487,50 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_code", ["code"]),
 
+    // --- Invitations (Phase 67) ---
+    // token-based invitations for external users to join workspaces
+    invitations: defineTable({
+      workspaceId: v.id("workspaces"),
+      email: v.string(), // invited person's email
+      role: v.union(
+        v.literal("admin"),
+        v.literal("member"),
+        v.literal("guest"),
+      ),
+      token: v.string(), // unique secure token
+      invitedBy: v.id("users"), // who sent the invite
+      status: v.union(
+        v.literal("pending"),
+        v.literal("accepted"),
+        v.literal("expired"),
+        v.literal("revoked"),
+      ),
+      expiresAt: v.number(), // epoch ms
+      createdAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_email", ["email"])
+      .index("by_token", ["token"]),
+
+    // --- Meeting policies (Phase 72) ---
+    // workspace-level default meeting settings
+    workspacePolicies: defineTable({
+      workspaceId: v.id("workspaces"),
+      waitingRoom: v.boolean(),
+      allowMic: v.boolean(),
+      allowCam: v.boolean(),
+      allowShare: v.union(
+        v.literal("everyone"),
+        v.literal("host"),
+        v.literal("hostAndCoHosts"),
+      ),
+      allowChat: v.boolean(),
+      allowReactions: v.boolean(),
+      allowRecording: v.boolean(),
+      updatedBy: v.id("users"),
+      updatedAt: v.number(),
+    }).index("by_workspace", ["workspaceId"]),
+
     // messages inside a breakout room (host can broadcast to any room)
     breakoutMessages: defineTable({
       roomId: v.id("breakoutRooms"),

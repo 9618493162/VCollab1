@@ -31,6 +31,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,7 @@ export function AppHeader({
     | "search"
     | "workspaces"
     | "messages"
+    | "contacts"
     | "admin"
     | "help";
 }) {
@@ -114,6 +116,12 @@ export function AppHeader({
               onClick={() => navigate("/messages")}
               icon={<MessageSquare className="size-3.5" />}
               label="Messages"
+            />
+            <NavLink
+              active={active === "contacts"}
+              onClick={() => navigate("/contacts")}
+              icon={<Users className="size-3.5" />}
+              label="Contacts"
             />
             <NavLink
               active={active === "admin"}
