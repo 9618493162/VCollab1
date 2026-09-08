@@ -7,6 +7,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { normalizeCode } from "./rooms";
+import { createNotification } from "./notifications";
 
 /**
  * Live recording state lives on the `rooms` doc so every participant sees a
@@ -263,6 +264,18 @@ export const handleEgressEvent = internalMutation({
         filename,
         durationMs,
       });
+      // Notify the recording owner that their recording is ready.
+      try {
+        await createNotification(ctx, {
+          userId: row.createdBy,
+          type: "recording",
+          title: "Your recording is ready",
+          body: `Meeting ${row.code} recording is available for playback.`,
+          link: `/meeting/${row.code}/analysis`,
+        });
+      } catch {
+        // best-effort
+      }
     } else if (status === "error") {
       const row = await findRecordingByEgress(ctx, egressId);
       if (row) await ctx.db.patch(row._id, { status: "error" });

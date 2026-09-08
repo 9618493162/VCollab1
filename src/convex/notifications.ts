@@ -90,3 +90,46 @@ export const markAllRead = mutation({
     }
   },
 });
+
+/** Delete a single notification (owner only). */
+export const remove = mutation({
+  args: { id: v.id("notifications") },
+  handler: async (ctx, { id }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return;
+    const row = await ctx.db.get(id);
+    if (row === null || row.userId !== userId) return;
+    await ctx.db.delete(id);
+  },
+});
+
+/**
+ * Paginated notification list. Returns up to `limit` notifications
+ * newer than `cursor` (a createdAt timestamp). Pass cursor=0 for the first page.
+ * Includes an `unreadOnly` filter for the Unread tab.
+ */
+export const listPaged = query({
+  args: {
+    cursor: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    unreadOnly: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { cursor, limit, unreadOnly }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return { items: [], nextCursor: 0, hasMore: false };
+    const pageSize = Math.min(limit ?? 30, 50);
+    let q = ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc");
+    if (cursor && cursor > 0) {
+      q = q.filter((q) => q.lt(q.field("createdAt"), cursor));
+    }
+    const rows = await q.take(pageSize + 1);
+    const hasMore = rows.length > pageSize;
+    const items = rows.slice(0, pageSize);
+    const filtered = unreadOnly === true ? items.filter((n) => !n.read) : items;
+    const nextCursor = items.length > 0 ? items[items.length - 1].createdAt : 0;
+    return { items: filtered, nextCursor, hasMore };
+  },
+});

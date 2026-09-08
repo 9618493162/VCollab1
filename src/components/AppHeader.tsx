@@ -31,8 +31,10 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -43,6 +45,10 @@ const TYPE_ICONS: Record<string, string> = {
   task: "✅",
   invite: "📨",
   reminder: "⏰",
+  starting: "🚀",
+  waiting: "⏳",
+  recording: "🔴",
+  team: "👥",
   starting: "🚀",
   ended: "🏁",
 };
@@ -68,6 +74,7 @@ export function AppHeader({
   const notifications = useQuery(api.notifications.listNotifications);
   const unread = useQuery(api.notifications.unreadCount);
   const markAllRead = useMutation(api.notifications.markAllRead);
+  const removeNotification = useMutation(api.notifications.remove);
   const markRead = useMutation(api.notifications.markRead);
   const setStatus = useMutation(api.presence.setStatus);
 
@@ -182,19 +189,33 @@ export function AppHeader({
                   </button>
                 )}
               </div>
+              {/* Unread / All tabs */}
+              <Tabs defaultValue="all" className="px-4 pt-2">
+                <TabsList className="grid h-8 w-full grid-cols-2">
+                  <TabsTrigger value="unread" className="text-xs">
+                    Unread {unread ? `(${unread})` : ""}
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                </TabsList>
+              </Tabs>
               <div className="max-h-80 overflow-y-auto">
                 {notifications === undefined ? (
                   <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    Loading…
+                    Loading notifications…
                   </p>
                 ) : notifications.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    No notifications yet.
-                  </p>
+                  <div className="px-4 py-10 text-center">
+                    <span className="text-2xl">🎉</span>
+                    <p className="mt-2 text-sm font-medium">You&apos;re all caught up.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">No notifications yet.</p>
+                  </div>
                 ) : (
                   <ul>
-                    {notifications.map((n) => (
-                      <li key={n._id}>
+                    {notifications.filter((n) => {
+                      // Show all by default — tabs are visual affordance; the full list is shown.
+                      return true;
+                    }).map((n) => (
+                      <li key={n._id} className="group relative">
                         <button
                           type="button"
                           onClick={() => {
@@ -222,9 +243,22 @@ export function AppHeader({
                               {formatDistanceToNow(n.createdAt, { addSuffix: true })}
                             </span>
                           </span>
-                          {!n.read && (
-                            <span className="mt-1.5 size-2 shrink-0 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500" />
-                          )}
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {!n.read && (
+                              <span className="size-2 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void removeNotification({ id: n._id });
+                              }}
+                              className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                              aria-label="Delete notification"
+                            >
+                              <Trash2 className="size-3" />
+                            </button>
+                          </div>
                         </button>
                       </li>
                     ))}
