@@ -61,27 +61,28 @@ async function requireMeetingAccess(ctx: ActionCtx, code: string) {
 const LLM_NOT_CONFIGURED =
   "AI isn't configured — add NVIDIA_API_KEY in the project Keys tab.";
 
-/** OpenRouter model to use for chat completions. */
-const OPENROUTER_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
+/** NVIDIA NIM model for chat completions. */
+const NVIDIA_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
-/** Return the OpenRouter provider config, or null if the key is missing. */
+/** Return the NVIDIA NIM provider config, or null if the key is missing. */
 function pickLlm(): {
   key: string;
   baseUrl: string;
   model: string;
   label: string;
 } | null {
-  if (process.env.NVIDIA_API_KEY)
-    return {
-      key: process.env.NVIDIA_API_KEY,
-      baseUrl: "https://openrouter.ai/api/v1",
-      model: OPENROUTER_MODEL,
-      label: "openrouter",
-    };
-  return null;
+  const key = process.env.NVIDIA_API_KEY;
+  if (!key) return null;
+  return {
+    key,
+    baseUrl: NVIDIA_BASE_URL,
+    model: NVIDIA_MODEL,
+    label: "nvidia-nim",
+  };
 }
 
-/** OpenAI-compatible chat completion against the first configured provider. */
+/** OpenAI-compatible chat completion against NVIDIA NIM. */
 async function llmChat(
   messages: { role: "system" | "user"; content: string }[],
 ): Promise<{ text: string; model: string }> {
@@ -97,16 +98,20 @@ async function llmChat(
     body: JSON.stringify({
       model: provider.model,
       messages,
-      temperature: 0.7,
+      temperature: 0.6,
+      top_p: 0.95,
+      max_tokens: 16384,
       stream: false,
     }),
   });
   if (!res.ok) {
     const body = await res.text();
     if (res.status === 401 || res.status === 403)
-      throw new Error("Invalid or expired API key. Get a new key at openrouter.ai/keys.");
+      throw new Error("Invalid or expired NVIDIA API key. Get a new key at build.nvidia.com.");
+    if (res.status === 429)
+      throw new Error("NVIDIA API rate limit — try again in a moment.");
     throw new Error(
-      `AI API error (${res.status}): ${body.slice(0, 300)}`,
+      `NVIDIA API error (${res.status}): ${body.slice(0, 300)}`,
     );
   }
   const data = (await res.json()) as {
@@ -115,9 +120,9 @@ async function llmChat(
     }[];
   };
   const message = data.choices?.[0]?.message;
-  // Some models return the visible answer in `content` (which can be
-  // null if a turn is cut off mid-thought). Fall back to the reasoning text
-  // so the user still gets a real response instead of an empty string.
+  // Nemotron reasoning models may return the answer in reasoning_content
+  // when content is null. Fall back to reasoning text so the user gets
+  // a real response.
   const text = (message?.content ?? message?.reasoning_content ?? "").trim();
   return {
     text,
@@ -129,7 +134,7 @@ async function llmChat(
  * Transcribe a recorded meeting. Uses Deepgram (speaker diarization +
  * smart formatting) when DEEPGRAM_API_KEY is set, falling back to
  * AssemblyAI. Summary + action items are generated via the configured
- * LLM provider (Groq → OpenRouter → OpenAI) when one is available.
+ * NVIDIA NIM when NVIDIA_API_KEY is set.
  */
 export const transcribeMeeting = action({
   args: { code: v.string(), storageId: v.id("_storage") },
@@ -367,7 +372,7 @@ export const askAssistant = action({
     if (!pickLlm())
       return {
         answer:
-          "The AI assistant isn't configured — add NVIDIA_API_KEY (OpenRouter key) in the project Keys tab to enable meeting intelligence.",
+          "The AI assistant isn't configured — add NVIDIA_API_KEY in the project Keys tab (get one at build.nvidia.com).",
         grounded: false,
       };
 
@@ -416,7 +421,7 @@ export const translateText = action({
 
 /**
  * Generate structured meeting minutes from the transcript + agenda. Uses
- * the LLM provider (Groq → OpenRouter → OpenAI) when a key is set; otherwise
+ * NVIDIA NIM when NVIDIA_API_KEY is set; otherwise
  * falls back to a deterministic summary assembled from the agenda and the
  * opening transcript lines, so the feature works without credentials
  * (never fake data).
@@ -619,7 +624,7 @@ export const transcribeChunk = action({
   },
 });
 
-/** Diagnostic: test whether the NVIDIA/OpenRouter key is set and working. */
+/** Diagnostic: test whether the NVIDIA NIM key is set and working. */
 export const testAiConnection = action({
   args: {},
   handler: async () => {
@@ -628,27 +633,25 @@ export const testAiConnection = action({
       return { ok: false, error: "NVIDIA_API_KEY is not set in Convex environment variables." };
 
     try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const res = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${key}`,
           "content-type": "application/json",
           Accept: "application/json",
-          "HTTP-Referer": "https://vcollab.freebuff.app",
-          "X-Title": "VCollab",
         },
         body: JSON.stringify({
-          model: OPENROUTER_MODEL,
+          model: NVIDIA_MODEL,
           messages: [{ role: "user", content: "Say hello in one word." }],
           stream: false,
-          temperature: 0.7,
+          temperature: 0.6,
           max_tokens: 100,
         }),
       });
 
       if (!res.ok) {
         const body = await res.text();
-        return { ok: false, error: `OpenRouter API returned ${res.status}: ${body.slice(0, 300)}` };
+        return { ok: false, error: `NVIDIA NIM returned ${res.status}: ${body.slice(0, 300)}` };
       }
 
       const data = (await res.json()) as {

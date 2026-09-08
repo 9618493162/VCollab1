@@ -97,7 +97,7 @@ function AssistantTab({ code }: { code: string }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (/not configured|isn\'t configured|no.*key|api.*key/i.test(msg)) {
-        setError("AI Assistant isn't available. Add NVIDIA_API_KEY (your OpenRouter key) in the project Keys tab.");
+        setError("AI Assistant isn't available. Add NVIDIA_API_KEY in the project Keys tab (get one at build.nvidia.com).");
       } else {
         setError(msg || "AI couldn\'t complete this request. Please try again.");
       }
