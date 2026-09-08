@@ -381,6 +381,7 @@ export default function History() {
 
 /** AI + recording details for a single meeting. */
 function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }) {
+  const navigate = useNavigate();
   const summaries = useQuery(api.aiData.getAiData, { code, kind: "summary" });
   const transcripts = useQuery(api.aiData.getAiData, { code, kind: "transcript" });
   const actionItems = useQuery(api.aiData.getAiData, { code, kind: "actionItems" });
@@ -454,6 +455,14 @@ function MeetingDetails({ code, onClose }: { code: string; onClose: () => void }
           <DialogDescription className="font-mono text-xs">
             {code}
           </DialogDescription>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-fit rounded-full text-xs"
+            onClick={() => { onClose(); navigate(`/meeting/${code}/analysis`); }}
+          >
+            Open full analysis →
+          </Button>
         </DialogHeader>
         <Tabs defaultValue="summary">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6">

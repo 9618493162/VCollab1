@@ -7,7 +7,7 @@ import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
 import React, { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Route, Routes, useLocation, useParams } from "react-router";
 import "./index.css";
 
 // Routes are static imports: in the sandboxed preview, a rotated dev session
@@ -20,6 +20,7 @@ import AuthPage from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Call from "./pages/Call";
 import History from "./pages/History";
+import { PostMeetingPage } from "./components/PostMeetingPage";
 import SettingsPage from "./pages/Settings";
 import Collab from "./pages/Collab";
 import Calendar from "./pages/Calendar";
@@ -106,7 +107,11 @@ const convexUrl =
     : MANAGED_CONVEX_URL;
 const convex = new ConvexReactClient(convexUrl);
 
-
+function PostMeetingPageWrapper() {
+  const { code } = useParams<{ code: string }>();
+  if (!code) return <NotFound />;
+  return <PostMeetingPage code={code} />;
+}
 
 function RouteSyncer() {
   const location = useLocation();
@@ -254,6 +259,14 @@ createRoot(document.getElementById("root")!).render(
                   behind /dashboard's RequireAuth. `/join/:code` is the
                   shareable link form (both routes resolve through the backend
                   before any access is granted). */}
+              <Route
+                path="/meeting/:code/analysis"
+                element={
+                  <RequireAuth>
+                    <PostMeetingPageWrapper />
+                  </RequireAuth>
+                }
+              />
               <Route path="/call/:code" element={<Call />} />
               <Route path="/join/:code" element={<Call />} />
               <Route path="*" element={<NotFound />} />
