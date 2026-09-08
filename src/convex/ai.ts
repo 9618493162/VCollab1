@@ -278,7 +278,7 @@ export const transcribeMeeting = action({
           {
             role: "system",
             content:
-              "You summarize meeting transcripts. Respond with: an Overview (2-3 sentences), Key Points (bullets), and Decisions (bullets). Keep it tight, no preamble.",
+              "You summarize meeting transcripts. Respond with exactly these sections: ## Executive Summary (2-3 sentences), ## Key Discussion Points (bullets), ## Decisions (bullets), ## Action Items (bullets with owners when named), ## Unresolved Questions (bullets, omit section if none), ## Risks / Concerns (bullets, omit section if none), ## Next Steps (bullets, omit section if none). Keep it tight, no preamble.",
           },
           { role: "user", content: src.slice(0, 28_000) },
         ]);

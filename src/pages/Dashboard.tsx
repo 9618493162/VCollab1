@@ -643,6 +643,14 @@ export default function Dashboard() {
                               <ClipboardList className="mr-1.5 size-3.5" /> Notes
                             </Button>
                             <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => navigate(`/meeting/${room.code}/analysis`)}
+                            >
+                              <Sparkles className="mr-1.5 size-3.5" /> Analysis
+                            </Button>
+                            <Button
                               variant="outline"
                               size="sm"
                               className="rounded-full"

@@ -49,7 +49,6 @@ const TYPE_ICONS: Record<string, string> = {
   waiting: "⏳",
   recording: "🔴",
   team: "👥",
-  starting: "🚀",
   ended: "🏁",
 };
 
