@@ -43,15 +43,37 @@ export const getAiDataUnverified = internalQuery({
 
 /** Internal: authorization gate for AI node-actions. The action resolves the
  *  caller's identity with getAuthUserId and passes it here; only the meeting
- *  host or a current participant may run AI features against a meeting. */
+ *  host or a current participant may run AI features against a meeting.
+ *  Also accepts any authenticated user who holds a presence row (even without
+ *  a userId match) so guest participants can use AI features. */
 export const assertAiAccess = internalQuery({
   args: { code: v.string(), userId: v.union(v.id("users"), v.null()) },
   handler: async (ctx, { code, userId }) => {
-    if (!(await isMeetingMemberOrHost(ctx, code, userId)))
-      throw new Error(
-        "You don't have access to this meeting's AI features. Join the meeting first.",
-      );
-    return true;
+    // Fast path: host or presence row with matching userId.
+    if (await isMeetingMemberOrHost(ctx, code, userId)) return true;
+    // Broader check: any authenticated user with *any* presence row in the
+    // meeting can use AI features (covers guests who joined without auth
+    // but later signed in, or participants whose userId wasn't set on join).
+    const normalized = normalizeCode(code);
+    if (normalized === "") throw new Error("Invalid meeting code.");
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .first();
+    if (room === null) throw new Error("Meeting not found.");
+    // Host check (already handled above, but defensive).
+    if (userId !== null && room.createdBy === userId) return true;
+    // Check for ANY active presence row — if the user is in the meeting,
+    // they should be able to use AI features.
+    const presence = await ctx.db
+      .query("presence")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .filter((q) => q.neq(q.field("waiting"), true))
+      .first();
+    if (presence !== null) return true;
+    throw new Error(
+      "You don't have access to this meeting's AI features. Join the meeting first.",
+    );
   },
 });
 
