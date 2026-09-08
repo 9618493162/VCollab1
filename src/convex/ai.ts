@@ -529,7 +529,97 @@ async function extractActionItems(transcript: string): Promise<string[]> {
     .slice(0, 12);
 }
 
-/** Diagnostic: test whether the API key is set and working. */
+/**
+ * Transcribe a short audio chunk via Deepgram's pre-recorded REST API.
+ * Used for live transcription polling: the client captures ~3 s of PCM,
+ * encodes it as a WAV, base64-encodes it, and posts it here. The result
+ * is appended to the meeting's live transcript in Convex.
+ *
+ * If DEEPGRAM_API_KEY is not set, returns an error so the client can
+ * fall back to the browser's Web Speech API.
+ */
+export const transcribeChunk = action({
+  args: {
+    code: v.string(),
+    audioBase64: v.string(),
+    sampleRate: v.number(),
+  },
+  handler: async (ctx, { code, audioBase64, sampleRate }) => {
+    const normalized = normalizeCode(code);
+    if (normalized === "") throw new Error("Invalid meeting code.");
+    await requireMeetingAccess(ctx, normalized);
+
+    const deepgramKey = process.env.DEEPGRAM_API_KEY;
+    if (!deepgramKey)
+      throw new Error(
+        "DEEPGRAM_API_KEY is not set — add it in the project Keys tab.",
+      );
+
+    // Decode base64 → raw bytes.
+    const audioBytes = Uint8Array.from(atob(audioBase64), (c) =>
+      c.charCodeAt(0),
+    );
+
+    // Deepgram pre-recorded endpoint: accepts WAV/OGG/MP3/WebM.
+    const params = new URLSearchParams({
+      model: "nova-3",
+      smart_format: "true",
+      language: "en",
+      utterances: "true",
+      diarize: "true",
+    });
+    const res = await fetch(
+      `https://api.deepgram.com/v1/listen?${params.toString()}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Token ${deepgramKey}`,
+          "content-type": "audio/wav",
+        },
+        body: audioBytes,
+      },
+    );
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(
+        `Deepgram chunk transcription failed (${res.status}): ${body.slice(0, 200)}`,
+      );
+    }
+
+    const data = (await res.json()) as {
+      results?: {
+        channels?: {
+          alternatives?: { transcript?: string }[];
+        }[];
+        utterances?: { speaker?: number; transcript?: string }[];
+      };
+    };
+
+    const utterances = data.results?.utterances ?? [];
+    let text = "";
+
+    if (utterances.length > 0) {
+      text = utterances
+        .map((u) => `Speaker ${(u.speaker ?? 0) + 1}: ${u.transcript}`)
+        .join("\n");
+    } else {
+      text = data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
+    }
+
+    // Persist to the live transcript for AI use.
+    if (text.trim()) {
+      await ctx.runMutation(api.aiData.appendLiveTranscript, {
+        code: normalized,
+        lines: [text.trim()],
+      });
+    }
+
+    return { text: text.trim() };
+  },
+});
+
+/** Diagnostic: test whether the NVIDIA/OpenRouter key is set and working. */
 export const testAiConnection = action({
   args: {},
   handler: async () => {
@@ -567,6 +657,29 @@ export const testAiConnection = action({
       const msg = data.choices?.[0]?.message;
       const reply = (msg?.content ?? msg?.reasoning_content ?? "").trim();
       return { ok: true, reply: reply.slice(0, 200) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+});
+
+/** Diagnostic: test whether the Deepgram key is set and working. */
+export const testDeepgramConnection = action({
+  args: {},
+  handler: async () => {
+    const key = process.env.DEEPGRAM_API_KEY;
+    if (!key)
+      return { ok: false, error: "DEEPGRAM_API_KEY is not set." };
+    try {
+      // Deepgram's projects endpoint validates the key.
+      const res = await fetch("https://api.deepgram.com/v1/projects", {
+        headers: { authorization: `Token ${key}` },
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        return { ok: false, error: `Deepgram API returned ${res.status}: ${body.slice(0, 200)}` };
+      }
+      return { ok: true, reply: "Deepgram connected" };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }

@@ -2,6 +2,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { useCallRoom, type PeerQuality } from "@/hooks/use-call-room";
+import { useDeepgramLive } from "@/hooks/use-deepgram-live";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -356,6 +357,13 @@ export default function Call() {
     },
     token,
   );
+
+  // Deepgram live transcription — captures mic audio and sends to Deepgram
+  // for server-side transcription when DEEPGRAM_API_KEY is configured.
+  const deepgram = useDeepgramLive({
+    code,
+    enabled: entered && call.captionsEnabled,
+  });
 
   /** Resume audio on all remote players — needed when browser blocks autoplay */
   const unblockAudio = useCallback(() => {
@@ -1611,6 +1619,20 @@ export default function Call() {
               <p className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-lg bg-amber-500/20 px-3 py-1 text-xs text-amber-600 dark:text-amber-200 backdrop-blur-sm">
                 {call.captionError}
               </p>
+            )}
+            {/* Deepgram live transcription status */}
+            {call.captionsEnabled && deepgram.status !== "off" && deepgram.status !== "unavailable" && (
+              <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg bg-background/80 px-2 py-1 text-[10px] text-muted-foreground backdrop-blur-sm">
+                <span className={cn(
+                  "size-1.5 rounded-full",
+                  deepgram.status === "active" ? "bg-green-500 animate-pulse" :
+                  deepgram.status === "starting" ? "bg-amber-500 animate-pulse" :
+                  "bg-red-500",
+                )} />
+                {deepgram.status === "active" ? "Deepgram" :
+                 deepgram.status === "starting" ? "Connecting..." :
+                 "Deepgram error"}
+              </div>
             )}
           </main>
 
