@@ -98,6 +98,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { MobileReactionsSheet } from "@/components/MobileReactionsSheet";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "👏", "🎉", "😮", "😢", "🔥", "🚀", "💯"];
 
@@ -1945,12 +1946,19 @@ export default function Call() {
                   </div>
                   {copied ? <CheckCheck className="size-4 text-emerald-500" /> : <Copy className="size-4 text-muted-foreground" />}
                 </button>
+                <div className="grid grid-cols-5 gap-1">
+                  {showReactions && REACTION_EMOJIS.map((emoji) => (
+                    <button key={emoji} type="button" onClick={() => fireBurst(emoji)} className="flex size-11 items-center justify-center rounded-xl text-2xl transition-all hover:scale-125 hover:bg-muted active:scale-90">
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
                 <div className="grid grid-cols-4 gap-2">
                   <button type="button" onClick={() => { void call.toggleShare(); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
                     <div className={cn("flex size-10 items-center justify-center rounded-full", call.sharing ? "bg-foreground text-background" : "bg-foreground/10 text-foreground")}><MonitorUp className="size-5" /></div>
                     <span className="text-[10px] text-muted-foreground">Share</span>
                   </button>
-                  <button type="button" onClick={() => { setShowReactions(true); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
+                  <button type="button" onClick={() => { setShowReactions((v) => !v); }} className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-muted">
                     <div className="flex size-10 items-center justify-center rounded-full bg-foreground/10 text-foreground"><Sparkles className="size-5" /></div>
                     <span className="text-[10px] text-muted-foreground">React</span>
                   </button>
