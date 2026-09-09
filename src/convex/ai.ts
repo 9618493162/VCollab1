@@ -50,11 +50,16 @@ async function loadAiData(
 
 /** Every meeting-scoped AI feature verifies the caller is the host or a
  *  current participant before touching that meeting's transcript/artifacts. */
-async function requireMeetingAccess(ctx: ActionCtx, code: string) {
+async function requireMeetingAccess(
+  ctx: ActionCtx,
+  code: string,
+  clientId?: string,
+) {
   const userId = await getAuthUserId(ctx);
   await ctx.runQuery(internal.aiData.assertAiAccess, {
     code,
     userId: userId ?? null,
+    clientId,
   });
 }
 
@@ -137,11 +142,11 @@ async function llmChat(
  * NVIDIA NIM when NVIDIA_API_KEY is set.
  */
 export const transcribeMeeting = action({
-  args: { code: v.string(), storageId: v.id("_storage") },
-  handler: async (ctx, { code, storageId }) => {
+  args: { code: v.string(), storageId: v.id("_storage"), clientId: v.optional(v.string()) },
+  handler: async (ctx, { code, storageId, clientId }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("Invalid meeting code.");
-    await requireMeetingAccess(ctx, normalized);
+    await requireMeetingAccess(ctx, normalized, clientId);
     const deepgramKey = process.env.DEEPGRAM_API_KEY;
     const assemblyKey = process.env.ASSEMBLYAI_API_KEY;
     if (!deepgramKey && !assemblyKey)
@@ -316,10 +321,10 @@ export const transcribeMeeting = action({
 
 /** Summarize an existing transcript + extract action items via the LLM provider. */
 export const summarizeTranscript = action({
-  args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  args: { code: v.string(), clientId: v.optional(v.string()) },
+  handler: async (ctx, { code, clientId }) => {
     const normalized = normalizeCode(code);
-    await requireMeetingAccess(ctx, normalized);
+    await requireMeetingAccess(ctx, normalized, clientId);
 
     const latest = await loadAiData(ctx, normalized, "transcript");
     const transcript = latest[0]?.content ?? "";
@@ -365,10 +370,10 @@ export const summarizeTranscript = action({
 
 /** Grounded Q&A over a meeting's transcript + summary. */
 export const askAssistant = action({
-  args: { code: v.string(), question: v.string() },
-  handler: async (ctx, { code, question }) => {
+  args: { code: v.string(), question: v.string(), clientId: v.optional(v.string()) },
+  handler: async (ctx, { code, question, clientId }) => {
     const normalized = normalizeCode(code);
-    await requireMeetingAccess(ctx, normalized);
+    await requireMeetingAccess(ctx, normalized, clientId);
     if (!pickLlm())
       return {
         answer:
@@ -427,10 +432,10 @@ export const translateText = action({
  * (never fake data).
  */
 export const generateMinutes = action({
-  args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  args: { code: v.string(), clientId: v.optional(v.string()) },
+  handler: async (ctx, { code, clientId }) => {
     const normalized = normalizeCode(code);
-    await requireMeetingAccess(ctx, normalized);
+    await requireMeetingAccess(ctx, normalized, clientId);
     const provider = pickLlm();
 
     const [transcripts, agenda] = await Promise.all([
@@ -548,11 +553,12 @@ export const transcribeChunk = action({
     code: v.string(),
     audioBase64: v.string(),
     sampleRate: v.number(),
+    clientId: v.optional(v.string()),
   },
-  handler: async (ctx, { code, audioBase64, sampleRate }) => {
+  handler: async (ctx, { code, audioBase64, sampleRate, clientId }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("Invalid meeting code.");
-    await requireMeetingAccess(ctx, normalized);
+    await requireMeetingAccess(ctx, normalized, clientId);
 
     const deepgramKey = process.env.DEEPGRAM_API_KEY;
     if (!deepgramKey)

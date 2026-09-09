@@ -63,13 +63,17 @@ export function AIPanel({
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {tab === "assistant" ? <AssistantTab code={code} /> : <TranscriptTab call={call} />}
+        {tab === "assistant" ? (
+          <AssistantTab code={code} clientId={call.clientId} />
+        ) : (
+          <TranscriptTab call={call} />
+        )}
       </div>
     </aside>
   );
 }
 
-function AssistantTab({ code }: { code: string }) {
+function AssistantTab({ code, clientId }: { code: string; clientId?: string }) {
   const ask = useAction(api.ai.askAssistant);
   const testConn = useAction(api.ai.testAiConnection);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -92,7 +96,7 @@ function AssistantTab({ code }: { code: string }) {
     setError(null);
     setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
     try {
-      const res = await ask({ code, question: trimmed });
+      const res = await ask({ code, question: trimmed, clientId });
       setMessages((prev) => [...prev, { role: "assistant", text: res.answer }]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";

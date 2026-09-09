@@ -363,6 +363,7 @@ export default function Call() {
   const deepgram = useDeepgramLive({
     code,
     enabled: entered && call.captionsEnabled,
+    clientId: call.clientId,
   });
 
   /** Resume audio on all remote players — needed when browser blocks autoplay */

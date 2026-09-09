@@ -26,9 +26,10 @@ const TARGET_RATE = 16_000;
 interface Options {
   code: string;
   enabled: boolean;
+  clientId?: string;
 }
 
-export function useDeepgramLive({ code, enabled }: Options) {
+export function useDeepgramLive({ code, enabled, clientId }: Options) {
   const transcribeChunk = useAction(api.ai.transcribeChunk);
 
   const [status, setStatus] = useState<
@@ -154,13 +155,14 @@ export function useDeepgramLive({ code, enabled }: Options) {
         code,
         audioBase64,
         sampleRate: TARGET_RATE,
+        clientId,
       });
     } catch (err) {
       console.warn("[Deepgram] chunk upload failed:", err);
     } finally {
       uploadingRef.current = false;
     }
-  }, [code, resample, encodeWav, arrayBufferToBase64, transcribeChunk]);
+  }, [code, clientId, resample, encodeWav, arrayBufferToBase64, transcribeChunk]);
 
   /** Start the live transcription pipeline. */
   const start = useCallback(async () => {
