@@ -245,6 +245,7 @@ export const checkEgress = action({
         url: file?.location || file?.filename || "",
         filename: file?.filename,
         durationMs: file?.duration != null ? Number(file.duration) : undefined,
+        fileSize: file?.size != null ? Number(file.size) : undefined,
       });
       return { status: "ready" as const, url: file?.location || undefined };
     }

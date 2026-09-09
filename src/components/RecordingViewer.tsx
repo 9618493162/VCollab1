@@ -28,6 +28,7 @@ interface Recording {
   egressId?: string;
   startedAt?: number;
   filename?: string;
+  fileSize?: number;
   status?: "recording" | "finalizing" | "ready" | "error";
 }
 
@@ -269,6 +270,9 @@ export function RecordingViewer({ recording }: Props) {
         <span>{new Date(recording.createdAt).toLocaleString()}</span>
         {recording.durationMs ? (
           <span>· {formatDuration(recording.durationMs)}</span>
+        ) : null}
+        {recording.fileSize ? (
+          <span>· {(recording.fileSize / 1024 / 1024).toFixed(1)} MB</span>
         ) : null}
       </div>
     </div>

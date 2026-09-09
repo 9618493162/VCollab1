@@ -281,6 +281,8 @@ const schema = defineSchema(
       ),
       // set once the egress file has been transcribed + analyzed (dedupe guard)
       transcribedAt: v.optional(v.number()),
+      // egress-reported file size in bytes (cloud recordings)
+      fileSize: v.optional(v.number()),
     })
       .index("by_code", ["code"])
       .index("by_egress", ["egressId"]),

@@ -237,8 +237,9 @@ export const finalizeCloudRecording = internalMutation({
     url: v.string(),
     filename: v.optional(v.string()),
     durationMs: v.optional(v.number()),
+    fileSize: v.optional(v.number()),
   },
-  handler: async (ctx, { code, egressId, url, filename, durationMs }) => {
+  handler: async (ctx, { code, egressId, url, filename, durationMs, fileSize }) => {
     const normalized = normalizeCode(code);
     if (normalized === "") return;
     const row = await findRecordingByEgress(ctx, egressId);
@@ -248,6 +249,7 @@ export const finalizeCloudRecording = internalMutation({
       url: url || undefined,
       filename,
       durationMs,
+      fileSize,
     });
     // Kick off the post-meeting pipeline (transcript → summary → action
     // items) exactly once for this egress. Fire-and-forget: a scheduling
@@ -261,6 +263,20 @@ export const finalizeCloudRecording = internalMutation({
       } catch {
         // best-effort — user can still generate analysis from the Recordings tab
       }
+    }
+    // Notify the recording owner their recording is ready — same as the
+    // webhook finalize path so users get the toast regardless of which
+    // finalize path wins the race.
+    try {
+      await createNotification(ctx, {
+        userId: row.createdBy,
+        type: "recording",
+        title: "Your recording is ready",
+        body: `Meeting ${row.code} recording is available for playback.`,
+        link: `/meeting/${row.code}/analysis`,
+      });
+    } catch {
+      // best-effort
     }
   },
 });
@@ -290,8 +306,9 @@ export const handleEgressEvent = internalMutation({
     url: v.optional(v.string()),
     filename: v.optional(v.string()),
     durationMs: v.optional(v.number()),
+    fileSize: v.optional(v.number()),
   },
-  handler: async (ctx, { egressId, status, url, filename, durationMs }) => {
+  handler: async (ctx, { egressId, status, url, filename, durationMs, fileSize }) => {
     if (status === "complete") {
       const row = await findRecordingByEgress(ctx, egressId);
       if (row === null) return;
@@ -300,6 +317,7 @@ export const handleEgressEvent = internalMutation({
         url: url || undefined,
         filename,
         durationMs,
+        fileSize,
       });
       // Auto-transcribe (idempotent, guarded by transcribedAt) — same
       // pipeline as the client-polling finalize path.

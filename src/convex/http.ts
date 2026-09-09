@@ -72,7 +72,7 @@ http.route({
       | {
           egress_id?: string;
           status?: number;
-          file_results?: { location?: string; filename?: string; duration?: number | string }[];
+          file_results?: { location?: string; filename?: string; duration?: number | string; size?: number | string }[];
         }
       | undefined;
     if (info?.egress_id) {
@@ -92,6 +92,7 @@ http.route({
         url: file?.location || file?.filename,
         filename: file?.filename,
         durationMs: file?.duration != null ? Number(file.duration) : undefined,
+        fileSize: file?.size != null ? Number(file.size) : undefined,
       });
     }
     return new Response("OK", { status: 200 });
