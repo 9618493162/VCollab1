@@ -2,10 +2,12 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import {
   internalMutation,
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { normalizeCode } from "./rooms";
 import { createNotification } from "./notifications";
 
@@ -139,6 +141,28 @@ export const getRecordingState = query({
   },
 });
 
+/** Internal: the recordings row for an egress, used by the auto-transcription
+ *  pipeline (internal.ai.transcribeEgressRecording) after finalization. */
+export const getRecordingByEgress = internalQuery({
+  args: { egressId: v.string() },
+  handler: async (ctx, { egressId }) => {
+    return await ctx.db
+      .query("recordings")
+      .withIndex("by_egress", (q) => q.eq("egressId", egressId))
+      .first();
+  },
+});
+
+/** Internal: stamp the egress row after its transcript/analysis is stored so
+ *  the pipeline never runs twice for the same recording. */
+export const markRecordingTranscribed = internalMutation({
+  args: { egressId: v.string() },
+  handler: async (ctx, { egressId }) => {
+    const row = await findRecordingByEgress(ctx, egressId);
+    if (row) await ctx.db.patch(row._id, { transcribedAt: Date.now() });
+  },
+});
+
 // ---- internal helpers for LiveKit cloud recordings (convex/livekit.ts) ----
 
 /** Mark the room as cloud-recording and create the pending recordings row. */
@@ -225,6 +249,19 @@ export const finalizeCloudRecording = internalMutation({
       filename,
       durationMs,
     });
+    // Kick off the post-meeting pipeline (transcript → summary → action
+    // items) exactly once for this egress. Fire-and-forget: a scheduling
+    // failure must never break finalization.
+    if (url) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.ai.transcribeEgressRecording, {
+          code: normalized,
+          egressId,
+        });
+      } catch {
+        // best-effort — user can still generate analysis from the Recordings tab
+      }
+    }
   },
 });
 
@@ -264,6 +301,18 @@ export const handleEgressEvent = internalMutation({
         filename,
         durationMs,
       });
+      // Auto-transcribe (idempotent, guarded by transcribedAt) — same
+      // pipeline as the client-polling finalize path.
+      if (url && !row.transcribedAt) {
+        try {
+          await ctx.scheduler.runAfter(0, internal.ai.transcribeEgressRecording, {
+            code: row.code,
+            egressId,
+          });
+        } catch {
+          // best-effort
+        }
+      }
       // Notify the recording owner that their recording is ready.
       try {
         await createNotification(ctx, {

@@ -10,7 +10,7 @@
 //     NVIDIA_API_KEY (meta/muse-glimmer-30b via NVIDIA NIM)
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { action, type ActionCtx } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { normalizeCode } from "./rooms";
 
@@ -133,9 +133,7 @@ async function llmChat(
     text,
     model: provider.model,
   };
-}
-
-/**
+}/**
  * Transcribe a recorded meeting. Uses Deepgram (speaker diarization +
  * smart formatting) when DEEPGRAM_API_KEY is set, falling back to
  * AssemblyAI. Summary + action items are generated via the configured
@@ -147,16 +145,63 @@ export const transcribeMeeting = action({
     const normalized = normalizeCode(code);
     if (normalized === "") throw new Error("Invalid meeting code.");
     await requireMeetingAccess(ctx, normalized, clientId);
-    const deepgramKey = process.env.DEEPGRAM_API_KEY;
-    const assemblyKey = process.env.ASSEMBLYAI_API_KEY;
-    if (!deepgramKey && !assemblyKey)
-      throw new Error(
-        "AI transcription isn't configured — add DEEPGRAM_API_KEY or ASSEMBLYAI_API_KEY in the project Keys tab.",
-      );
 
     const url = await ctx.storage.getUrl(storageId);
     if (url === null) throw new Error("Couldn't find the recording to transcribe.");
-    const audio = await (await fetch(url)).arrayBuffer();
+    return await transcribeAndAnalyze(ctx, normalized, url);
+  },
+});
+
+/**
+ * Post-meeting pipeline for CLOUD (LiveKit Egress) recordings, scheduled
+ * automatically when an egress finalizes. Same pipeline as transcribeMeeting
+ * (shared helper below) so both paths produce identical Transcript / Summary /
+ * Action Items data — the UI tabs don't care which path produced it.
+ * Runs as an internal action: no client can invoke or fake it.
+ */
+export const transcribeEgressRecording = internalAction({
+  args: { code: v.string(), egressId: v.string() },
+  handler: async (ctx, { code, egressId }) => {
+    const row = await ctx.runQuery(internal.recording.getRecordingByEgress, {
+      egressId,
+    });
+    if (row === null) return;
+    // Already transcribed for this egress — never duplicate work.
+    if (row.transcribedAt) return;
+    if (!row.url) return; // nothing playable yet
+
+    try {
+      await transcribeAndAnalyze(ctx, normalizeCode(code) || code, row.url);
+      await ctx.runMutation(internal.recording.markRecordingTranscribed, {
+        egressId,
+      });
+    } catch (error) {
+      // Transcription is optional — the recording itself remains intact.
+      console.warn(
+        `[ai] egress transcription failed for ${egressId}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  },
+});
+
+/**
+ * Shared STT → LLM pipeline used by BOTH local uploads (transcribeMeeting)
+ * and cloud egress finalization (transcribeEgressRecording). Do not duplicate.
+ */
+async function transcribeAndAnalyze(
+  ctx: ActionCtx,
+  normalized: string,
+  audioUrl: string,
+): Promise<{ transcript: string; summary: string }> {
+  const deepgramKey = process.env.DEEPGRAM_API_KEY;
+  const assemblyKey = process.env.ASSEMBLYAI_API_KEY;
+  if (!deepgramKey && !assemblyKey)
+    throw new Error(
+      "AI transcription isn't configured — add DEEPGRAM_API_KEY or ASSEMBLYAI_API_KEY in the project Keys tab.",
+    );
+
+  const audio = await (await fetch(audioUrl)).arrayBuffer();
 
     let lines: string;
     let text: string;
@@ -316,8 +361,7 @@ export const transcribeMeeting = action({
       `/collab/${normalized}`,
     );
     return { transcript: lines || text, summary };
-  },
-});
+}
 
 /** Summarize an existing transcript + extract action items via the LLM provider. */
 export const summarizeTranscript = action({
