@@ -187,4 +187,80 @@ describe("cloud recording lifecycle (internal mutations)", () => {
       }),
     ).resolves.toBeNull();
   });
+
+  it("stamps transcribedAt via markRecordingTranscribed and exposes the row by egress", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const host = t.withIdentity({ subject: hostId });
+    const code = await host.mutation(api.rooms.createRoom, {});
+
+    await t.mutation(internal.recording.startCloudRecording, {
+      code,
+      clientId: "c-host",
+      byName: "Host",
+      egressId: "eg-3",
+      startedAt: 1_700_000_000_000,
+    });
+    await t.mutation(internal.recording.handleEgressEvent, {
+      egressId: "eg-3",
+      status: "complete",
+      url: "https://cdn.livekit.cloud/recordings/xyz.mp4",
+      durationMs: 30_000,
+    });
+
+    // Pipeline query finds the finalized row by egress id.
+    const row = await t.query(internal.recording.getRecordingByEgress, {
+      egressId: "eg-3",
+    });
+    expect(row).toMatchObject({
+      code,
+      egressId: "eg-3",
+      url: "https://cdn.livekit.cloud/recordings/xyz.mp4",
+      status: "ready",
+    });
+    expect(row?.transcribedAt).toBeUndefined();
+
+    // Stamping is idempotent from the pipeline's perspective.
+    await t.mutation(internal.recording.markRecordingTranscribed, {
+      egressId: "eg-3",
+    });
+    const stamped = await t.query(internal.recording.getRecordingByEgress, {
+      egressId: "eg-3",
+    });
+    expect(stamped?.transcribedAt).toBeTypeOf("number");
+
+    // Unknown egress is a no-op.
+    await t.mutation(internal.recording.markRecordingTranscribed, {
+      egressId: "eg-none",
+    });
+  });
+
+  it("finalizeCloudRecording produces the same ready row as the webhook path", async () => {
+    const t = makeTestClient();
+    const hostId = await insertUser(t, "host@example.com", "Host");
+    const host = t.withIdentity({ subject: hostId });
+    const code = await host.mutation(api.rooms.createRoom, {});
+
+    await t.mutation(internal.recording.startCloudRecording, {
+      code,
+      clientId: "c-host",
+      byName: "Host",
+      egressId: "eg-4",
+      startedAt: 1_700_000_000_000,
+    });
+    // Client-polling path (livekit.checkEgress → this mutation).
+    await t.mutation(internal.recording.finalizeCloudRecording, {
+      code,
+      egressId: "eg-4",
+      url: "https://cdn.livekit.cloud/recordings/poll.mp4",
+      durationMs: 12_000,
+    });
+
+    const rows = await t.query(api.call.listRecordings, { code });
+    expect(rows[0]).toMatchObject({
+      status: "ready",
+      url: "https://cdn.livekit.cloud/recordings/poll.mp4",
+      durationMs: 12_000,
+    });
+  });
 });
