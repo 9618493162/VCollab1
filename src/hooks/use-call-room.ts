@@ -1188,7 +1188,7 @@ export function useCallRoom(
             durationMs: Date.now() - startedAt,
           });
           try {
-            await transcribeMeeting({ code, storageId });
+            await transcribeMeeting({ code, storageId, clientId });
           } catch (error) {
             setRecordingError(
               error instanceof Error ? error.message : "Transcription failed.",
