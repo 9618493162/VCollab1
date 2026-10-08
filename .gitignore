@@ -35,3 +35,7 @@ pnpm-debug.log*
 
 # test coverage
 coverage
+
+# android release signing key (never commit)
+android/keystore/
+android/keystore.properties
