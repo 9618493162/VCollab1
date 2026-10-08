@@ -96,6 +96,80 @@ export const createSignedUploadUrl = action({
   },
 });
 
+// Create the public APK bucket (idempotent) + upload the current build APK.
+// Triggered from the app's /download page once, after a new build.
+export const ensureAndUploadApk = action({
+  args: { fileName: v.string() },
+  handler: async (ctx, args) => {
+    const client = getClient();
+
+    // 1. Create the public bucket once.
+    let bucketExists = true;
+    const { data: bucketData, error: getError } = await client.storage.getBucket("vcollab-apks");
+    if (!bucketData) {
+      bucketExists = false;
+      const { error: createError } = await client.storage.createBucket("vcollab-apks", {
+        public: true,
+      });
+      if (createError && !createError.message.toLowerCase().includes("already exists")) {
+        throw new Error(`vcollab-apks bucket setup failed: ${createError.message}`);
+      }
+      bucketExists = !createError;
+    }
+
+    // 2. Upload the APK from disk. Convex actions run in Node, so the file is
+    //    local to the build — use the root copy (VCollab-1.0.0.apk) or the Gradle
+    //    output if that's what exists.
+    const pathMod = await import("node:path");
+    const fs = await import("node:fs");
+    const candidate =
+      pathMod.resolve(process.cwd(), "VCollab-1.0.0.apk") ||
+      pathMod.resolve(process.cwd(), "android/app/build/outputs/apk/release/app-release.apk");
+    let bytes: Buffer;
+    try {
+      bytes = fs.readFileSync(candidate);
+    } catch {
+      throw new Error(`No APK found at ${candidate} — build it first with bun run build then assembleRelease.`);
+    }
+    if (bytes.length < 1_000_000) {
+      throw new Error(`APK too small (${bytes.length} bytes) at ${candidate} — not a valid build.`);
+    }
+
+    const name = args.fileName || "VCollab-1.0.0.apk";
+    let lastErr = null;
+    try {
+      const { error: uploadError } = await client.storage.from("vcollab-apks").upload(name, bytes, {
+        upsert: true,
+      });
+      if (uploadError) throw new Error(`Couldn't upload APK: ${uploadError.message}`);
+    } catch (err) {
+      lastErr = err;
+      // Persist the error to the uploads table so we can inspect it (the WS drops
+      // the return value when the server throws, so we log here instead).
+      try {
+        const { data: existing } = await ctx.runQuery(internal.supabaseData.getLatestUploadError);
+        await ctx.runMutation(internal.supabaseData.setLatestUploadError, {
+          message: String(err?.message ?? err),
+          stack: String(err?.stack ?? ""),
+          timestamp: Date.now(),
+        });
+      } catch (logErr) {
+        ctx.log(String(logErr?.message ?? logErr));
+      }
+      throw err;
+    }
+
+    // 3. Public URL.
+    const { data: urlData } = client.storage.from("vcollab-apks").getPublicUrl(name);
+    return {
+      uploaded: true,
+      path: name,
+      size: bytes.length,
+      url: urlData?.publicUrl ?? null,
+    };
+  },
+});
+
 type FileWithUrl = {
   _id: string;
   code: string;

@@ -34,6 +34,7 @@ import Contacts from "./pages/Contacts";
 import NotFound from "./pages/NotFound";
 import { CommandPalette } from "./components/CommandPalette";
 import { OnboardingWizard } from "./components/OnboardingWizard";
+import UploadApkPage from "./pages/UploadApk";
 
 /** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
  *  crashing the whole app (e.g. hook errors in WebContainer environment). */
@@ -269,6 +270,7 @@ createRoot(document.getElementById("root")!).render(
               />
               <Route path="/call/:code" element={<Call />} />
               <Route path="/join/:code" element={<Call />} />
+              <Route path="/download" element={<UploadApkPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CommandPalette />
